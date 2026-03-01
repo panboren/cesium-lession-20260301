@@ -10,9 +10,18 @@ export { PolylineTrailEffect } from './polylineTrailEffect'
 export { LightSpreadEffect } from './lightSpreadEffect'
 export { FireSmokeEffect } from './fireSmokeEffect'
 export { WeatherEffect } from './weatherEffect'
+export { FireworkEffect } from './fireworkEffect'
+export { FountainEffect, FountainType } from './fountainEffect'
 export type {
   WindField,
   RainOptions,
   SnowOptions,
   WeatherOptions
 } from './weatherEffect'
+export type {
+  FireworkColor,
+  FireworkOptions
+} from './fireworkEffect'
+export type {
+  FountainOptions
+} from './fountainEffect'

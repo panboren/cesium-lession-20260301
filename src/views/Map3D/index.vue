@@ -87,6 +87,9 @@
             <el-form-item label="雨雪天气">
               <el-switch v-model="showWeather" @change="onWeatherChange" />
             </el-form-item>
+            <el-form-item label="烟花庆典">
+              <el-switch v-model="showFirework" @change="onFireworkChange" />
+            </el-form-item>
           </el-form>
         </el-collapse-item>
 
@@ -173,7 +176,8 @@ import {
   LightSpreadEffect,
   PolylineTrailEffect,
   FireSmokeEffect,
-  WeatherEffect
+  WeatherEffect,
+  FireworkEffect
 } from '@/cesium/effects'
 import { registerCustomMaterials, setEffectTheme } from '@/cesium/materials/customMaterials'
 import type { DrawResult, CameraPosition } from '@/types/cesium'
@@ -218,6 +222,7 @@ const showLightSpread = ref(false)
 const showFlyLines = ref(false)
 const showFireSmoke = ref(false)
 const showWeather = ref(false)
+const showFirework = ref(false)
 const weatherType = ref('rain')
 const rainIntensity = ref(1)
 const windDirection = ref(360)
@@ -625,6 +630,10 @@ const onEffectThemeChange = () => {
     onWeatherChange(false)
     setTimeout(() => onWeatherChange(true), 100)
   }
+  if (showFirework.value) {
+    onFireworkChange(false)
+    setTimeout(() => onFireworkChange(true), 100)
+  }
 }
 
 /**
@@ -981,6 +990,62 @@ const onWindChange = () => {
   const weatherEffect = effectsManager.getEffect('weather') as WeatherEffect
   if (weatherEffect) {
     weatherEffect.setWind(windDirection.value, windSpeed.value)
+  }
+}
+
+/**
+ * 烟花庆典特效切换
+ */
+const onFireworkChange = (show: boolean) => {
+  const manager = getCesiumManager()
+  if (!manager) return
+
+  if (show) {
+    const viewer = manager.getViewer()
+    if (!viewer) return
+
+    console.log('[Map3D] Creating firework effect...')
+    const fireworkEffect = new FireworkEffect(viewer)
+
+    // 在北京上空发射多枚烟花
+    fireworkEffect.launchMultiple(8, {
+      longitude: 116.39,
+      latitude: 39.9
+    })
+
+    effectsManager.addEffect('firework', fireworkEffect)
+    console.log('[Map3D] Firework effect added to manager')
+
+    // 飞到合适的视角观察烟花
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(116.391734, 39.877281, 1778),
+      orientation: {
+        heading: Cesium.Math.toRadians(0),
+        pitch: Cesium.Math.toRadians(-20),
+        roll: 0
+      },
+      duration: 2
+    })
+
+    ElMessage.success('烟花庆典特效已开启')
+
+    // 持续发射烟花
+    const interval = setInterval(() => {
+      if (!showFirework.value) {
+        clearInterval(interval)
+        return
+      }
+      const effect = effectsManager.getEffect('firework') as FireworkEffect
+      if (effect) {
+        effect.launchMultiple(3, {
+          longitude: 116.39 + (Math.random() - 0.5) * 0.02,
+          latitude: 39.9 + (Math.random() - 0.5) * 0.02
+        })
+      }
+    }, 2500) // 减少发射频率
+  } else {
+    effectsManager.removeEffect('firework')
+    ElMessage.success('烟花庆典特效已关闭')
   }
 }
 </script>
