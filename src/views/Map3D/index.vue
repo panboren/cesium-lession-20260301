@@ -2,7 +2,6 @@
   <div class="map-3d-container">
     <!-- Cesium 3D 地图 -->
     <CesiumViewer
-      ref="cesiumViewerRef"
       :initial-latitude="39.9075"
       :initial-longitude="116.3912"
       :initial-height="2000"
@@ -56,6 +55,23 @@
             </el-form-item>
           </el-form>
         </el-collapse-item>
+
+        <el-collapse-item title="特效展示" name="effects">
+          <el-form label-width="100px" size="small">
+            <el-form-item label="雷达扫描">
+              <el-switch v-model="showRadar" @change="onRadarChange" />
+            </el-form-item>
+            <el-form-item label="光墙特效">
+              <el-switch v-model="showLightWall" @change="onLightWallChange" />
+            </el-form-item>
+            <el-form-item label="流光扩散">
+              <el-switch v-model="showLightSpread" @change="onLightSpreadChange" />
+            </el-form-item>
+            <el-form-item label="飞线特效">
+              <el-switch v-model="showFlyLines" @change="onFlyLinesChange" />
+            </el-form-item>
+          </el-form>
+        </el-collapse-item>
       </el-collapse>
     </div>
 
@@ -90,7 +106,15 @@ import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Delete } from '@element-plus/icons-vue'
 import { CesiumViewer } from '@/cesium'
+import { getCesiumManager } from '@/cesium/core/cesiumManager'
 import { cesiumService } from '@/services/cesiumService'
+import {
+  effectsManager,
+  RadarEffect,
+  LightWallEffect,
+  LightSpreadEffect,
+  PolylineTrailEffect
+} from '@/cesium/effects'
 import type { DrawResult, CameraPosition } from '@/types/cesium'
 import { DrawType } from '@/types/cesium'
 import * as Cesium from 'cesium'
@@ -98,7 +122,6 @@ import * as Cesium from 'cesium'
 /**
  * Refs
  */
-const cesiumViewerRef = ref<InstanceType<typeof CesiumViewer>>()
 const activeLayers = ref(['layers'])
 const layerTreeData = ref([
   {
@@ -128,6 +151,10 @@ const sceneMode = ref('SCENE3D')
 const showTerrain = ref(false)
 const currentTerrainType = ref('none')
 const showAtmosphere = ref(true)
+const showRadar = ref(false)
+const showLightWall = ref(false)
+const showLightSpread = ref(false)
+const showFlyLines = ref(false)
 const drawResults = ref<DrawResult[]>([])
 const cameraInfo = ref<CameraPosition | null>(null)
 
@@ -142,6 +169,8 @@ onMounted(() => {
  * 地图就绪
  */
 const onMapReady = () => {
+  // 初始化特效管理器
+  effectsManager.init()
   addSampleMarkers()
 }
 
@@ -374,6 +403,141 @@ const clearDrawResults = () => {
   cesiumService.clearAllEntities()
   drawResults.value = []
   ElMessage.success('已清除所有绘制')
+}
+
+/**
+ * 雷达特效切换
+ */
+const onRadarChange = (show: boolean) => {
+  const manager = getCesiumManager()
+  if (!manager) return
+
+  if (show) {
+    const viewer = manager.getViewer()
+    if (!viewer) return
+
+    // 在北京位置创建雷达
+    const radarEffect = new RadarEffect(viewer)
+    radarEffect.create(116.35, 39.88, 116.43, 39.93)
+    effectsManager.addEffect('radar', radarEffect)
+    ElMessage.success('雷达特效已开启')
+  } else {
+    effectsManager.removeEffect('radar')
+    ElMessage.success('雷达特效已关闭')
+  }
+}
+
+/**
+ * 光墙特效切换
+ */
+const onLightWallChange = (show: boolean) => {
+  const manager = getCesiumManager()
+  if (!manager) return
+
+  if (show) {
+    const viewer = manager.getViewer()
+    if (!viewer) return
+
+    // 在北京创建光墙
+    console.log('[Map3D] Creating light wall effect...')
+    const lightWallEffect = new LightWallEffect(viewer)
+    lightWallEffect.create(
+      [116.35, 39.88, 116.43, 39.88, 116.43, 39.93, 116.35, 39.93, 116.35, 39.88],
+      800,
+      '科技园光墙'
+    )
+    effectsManager.addEffect('lightWall', lightWallEffect)
+    console.log('[Map3D] Light wall effect added to manager')
+
+    // 飞到光墙上方观察（调整相机到更合适的位置）
+    console.log('[Map3D] Flying to light wall position...')
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(116.39, 39.905, 3000),
+      orientation: {
+        heading: Cesium.Math.toRadians(0),
+        pitch: Cesium.Math.toRadians(-30),
+        roll: 0
+      },
+      duration: 2
+    })
+
+    ElMessage.success('光墙特效已开启')
+  } else {
+    effectsManager.removeEffect('lightWall')
+    ElMessage.success('光墙特效已关闭')
+  }
+}
+
+/**
+ * 流光扩散特效切换
+ */
+const onLightSpreadChange = (show: boolean) => {
+  const manager = getCesiumManager()
+  if (!manager) return
+
+  if (show) {
+    const viewer = manager.getViewer()
+    if (!viewer) return
+
+    // 在北京创建流光扩散
+    const lightSpreadEffect = new LightSpreadEffect(viewer)
+    lightSpreadEffect.create(116.35, 39.88, 116.43, 39.93, true)
+    effectsManager.addEffect('lightSpread', lightSpreadEffect)
+    ElMessage.success('流光扩散特效已开启')
+  } else {
+    effectsManager.removeEffect('lightSpread')
+    ElMessage.success('流光扩散特效已关闭')
+  }
+}
+
+/**
+ * 飞线特效切换
+ */
+const onFlyLinesChange = (show: boolean) => {
+  const manager = getCesiumManager()
+  if (!manager) return
+
+  if (show) {
+    const viewer = manager.getViewer()
+    if (!viewer) return
+
+    // 创建多条飞线
+    const lines: Array<{
+      startLon: number
+      startLat: number
+      startHeight: number
+      endLon: number
+      endLat: number
+      endHeight: number
+      width?: number
+    }> = []
+
+    // 生成随机飞线
+    for (let i = 0; i < 20; i++) {
+      const startLon = 116.35 + Math.random() * 0.08
+      const startLat = 39.88 + Math.random() * 0.05
+      const endLon = startLon + (Math.random() - 0.5) * 0.02
+      const endLat = startLat + (Math.random() - 0.5) * 0.02
+
+      lines.push({
+        startLon,
+        startLat,
+        startHeight: 100,
+        endLon,
+        endLat,
+        endHeight: 500 + Math.random() * 1000,
+        width: 2
+      })
+    }
+
+    const flyLineEffect = new PolylineTrailEffect(viewer, Cesium.Color.CYAN)
+    flyLineEffect.createMultiple(lines)
+    effectsManager.addEffect('flyLines', flyLineEffect)
+    ElMessage.success('飞线特效已开启')
+  } else {
+    effectsManager.removeEffect('flyLines')
+    ElMessage.success('飞线特效已关闭')
+  }
 }
 </script>
 
