@@ -421,6 +421,17 @@ const onRadarChange = (show: boolean) => {
     radarEffect.create(116.35, 39.88, 116.43, 39.93)
     effectsManager.addEffect('radar', radarEffect)
     ElMessage.success('雷达特效已开启')
+
+    // 飞到预设视角
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(116.396187, 39.80553, 10802.43),
+      orientation: {
+        heading: Cesium.Math.toRadians(0),
+        pitch: Cesium.Math.toRadians(-45),
+        roll: 0
+      },
+      duration: 2
+    })
   } else {
     effectsManager.removeEffect('radar')
     ElMessage.success('雷达特效已关闭')
@@ -452,10 +463,10 @@ const onLightWallChange = (show: boolean) => {
     // 飞到光墙上方观察（调整相机到更合适的位置）
     console.log('[Map3D] Flying to light wall position...')
     viewer.camera.flyTo({
-      destination: Cesium.Cartesian3.fromDegrees(116.39, 39.905, 3000),
+      destination: Cesium.Cartesian3.fromDegrees(116.396187, 39.80553, 10802.43),
       orientation: {
         heading: Cesium.Math.toRadians(0),
-        pitch: Cesium.Math.toRadians(-30),
+        pitch: Cesium.Math.toRadians(-45),
         roll: 0
       },
       duration: 2
