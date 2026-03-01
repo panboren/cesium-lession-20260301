@@ -1,7 +1,8 @@
 /**
  * 喷泉/水流特效 - Cesium 1.138+
- * 粒子系统 + 向上发射器 + 重力模拟
+ * 粒子系统 + 向上发射器 + 重力模拟 + 波浪纹理
  * 城市喷泉、瀑布效果
+ * 参考 Three.js Water Shader 的波浪模拟技术
  */
 
 import * as Cesium from 'cesium'
@@ -12,7 +13,8 @@ import * as Cesium from 'cesium'
 export enum FountainType {
   FOUNTAIN = 'fountain', // 喷泉 - 向上喷射后落下
   WATERFALL = 'waterfall', // 瀑布 - 从高处流下
-  GUSH = 'gush' // 泉涌 - 地面涌出
+  GUSH = 'gush', // 泉涌 - 地面涌出
+  RIPPLE = 'ripple' // 水面波纹 - 平静水面
 }
 
 /**
@@ -36,6 +38,9 @@ export interface FountainOptions {
   }
   width?: number // 喷泉/瀑布宽度
   lifeTime?: number // 粒子生命周期
+  waveSpeed?: number // 波浪速度（参考 Three.js）
+  waveStrength?: number // 波浪强度（参考 Three.js）
+  rippleRadius?: number // 波纹半径（用于 RIPPLE 模式）
 }
 
 /**
@@ -48,6 +53,8 @@ interface FountainParticle {
   life: number
   maxLife: number
   initialVelocity: Cesium.Cartesian3
+  wavePhase: number // 波浪相位（参考 Three.js）
+  baseSize: number // 基础粒子大小
 }
 
 /**
@@ -59,6 +66,7 @@ export class FountainEffect {
   private isActive: boolean = false
   private updateInterval: number | null = null
   private generateInterval: number | null = null
+  private time: number = 0 // 时间累积（用于波浪动画）
 
   // 默认配置
   private defaultOptions = {
@@ -70,7 +78,10 @@ export class FountainEffect {
     gravity: 9.8,
     wind: { direction: 0, speed: 0 },
     width: 10,
-    lifeTime: 3.0
+    lifeTime: 3.0,
+    waveSpeed: 0.03, // 参考 Three.js WaterRefractionShader
+    waveStrength: 0.5, // 参考 Three.js
+    rippleRadius: 50
   }
 
   constructor(viewer: Cesium.Viewer) {
@@ -78,29 +89,42 @@ export class FountainEffect {
   }
 
   /**
-   * 创建粒子纹理 - 水滴形状
+   * 计算波浪位移 - 参考 Three.js Water.js 的 getNoise 函数
+   * 使用多层噪声叠加模拟真实水波
    */
-  private createWaterTexture(): HTMLCanvasElement {
-    const canvas = document.createElement('canvas')
-    canvas.width = 64
-    canvas.height = 64
-    const ctx = canvas.getContext('2d')
-
-    if (ctx) {
-      // 绘制水滴形状
-      const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32)
-      gradient.addColorStop(0, 'rgba(255, 255, 255, 1)')
-      gradient.addColorStop(0.3, 'rgba(200, 240, 255, 0.9)')
-      gradient.addColorStop(0.7, 'rgba(100, 200, 255, 0.6)')
-      gradient.addColorStop(1, 'rgba(50, 150, 255, 0)')
-
-      ctx.fillStyle = gradient
-      ctx.beginPath()
-      ctx.arc(32, 32, 30, 0, Math.PI * 2)
-      ctx.fill()
+  private calculateWaveOffset(
+    x: number,
+    y: number,
+    z: number,
+    time: number,
+    waveSpeed: number,
+    waveStrength: number
+  ): { x: number; y: number; z: number } {
+    // 参考 Three.js 的多层噪声技术
+    // 使用多个不同频率和速度的正弦波叠加
+    
+    const scale = 0.1
+    
+    // 第一层波浪
+    const uv0 = scale * time * waveSpeed
+    const wave1 = Math.sin(x * scale + uv0) * Math.cos(y * scale + uv0 * 0.7)
+    
+    // 第二层波浪 - 不同频率
+    const uv1 = scale * time * waveSpeed * 1.5
+    const wave2 = Math.cos(x * scale * 1.3 + uv1) * Math.sin(y * scale * 1.3 + uv1 * 0.8)
+    
+    // 第三层波浪 - 细节
+    const uv2 = scale * time * waveSpeed * 2.0
+    const wave3 = Math.sin(x * scale * 2.0 + uv2) * Math.cos(y * scale * 2.0 + uv2 * 0.6)
+    
+    // 组合波浪
+    const combinedWave = (wave1 + wave2 * 0.7 + wave3 * 0.4) * waveStrength
+    
+    return {
+      x: combinedWave * 2,
+      y: combinedWave * 2,
+      z: Math.sin(time * 2 + x * 0.05 + y * 0.05) * waveStrength * 3
     }
-
-    return canvas
   }
 
   /**
@@ -163,6 +187,19 @@ export class FountainEffect {
         return new Cesium.Cartesian3(vx, vy, vz)
       }
 
+      case FountainType.RIPPLE: {
+        // 波纹：从中心向外扩散
+        const angle = (offset / options.particleCount) * Math.PI * 2
+        const speed = 10 + Math.random() * 20
+        const radiusOffset = Math.random() * 10
+
+        const vx = speed * Math.cos(angle) * (1 + radiusOffset / 50)
+        const vy = speed * Math.sin(angle) * (1 + radiusOffset / 50)
+        const vz = (Math.random() - 0.5) * 5 // 轻微的垂直波动
+
+        return new Cesium.Cartesian3(vx, vy, vz)
+      }
+
       default:
         return new Cesium.Cartesian3(0, 0, 0)
     }
@@ -208,28 +245,79 @@ export class FountainEffect {
     )
 
     // 随机调整透明度，模拟水滴的不同亮度
-    const alpha = 0.6 + Math.random() * 0.3
+    const baseAlpha = 0.6 + Math.random() * 0.3
+    const baseSize = 3 + Math.random() * 4
+    const wavePhase = Math.random() * Math.PI * 2
 
     // 创建粒子实体
-    const particleSize = 3 + Math.random() * 4
     const entity = this.viewer.entities.add({
       position: new Cesium.CallbackProperty(() => {
         const p = this.particles.find((item) => item.entity === entity)
-        return p ? p.position : finalPosition
+        if (!p) return finalPosition
+
+        // 应用波浪偏移 - 参考 Three.js 的实时波浪计算
+        const waveOffset = this.calculateWaveOffset(
+          p.position.x,
+          p.position.y,
+          p.position.z,
+          this.time,
+          options.waveSpeed,
+          options.waveStrength
+        )
+
+        return new Cesium.Cartesian3(
+          p.position.x + waveOffset.x,
+          p.position.y + waveOffset.y,
+          p.position.z + waveOffset.z
+        )
       }, false),
       point: {
-        pixelSize: particleSize,
+        pixelSize: new Cesium.CallbackProperty(() => {
+          const p = this.particles.find((item) => item.entity === entity)
+          if (!p) return baseSize
+
+          // 参考 Three.js 的波浪强度影响粒子大小
+          const waveOffset = this.calculateWaveOffset(
+            p.position.x,
+            p.position.y,
+            p.position.z,
+            this.time,
+            options.waveSpeed,
+            options.waveStrength
+          )
+          
+          // 波浪影响粒子大小的闪烁效果
+          const sizeVariation = 1 + waveOffset.z * 0.1
+          return p.baseSize * sizeVariation
+        }, false),
         color: new Cesium.CallbackProperty(() => {
           const p = this.particles.find((item) => item.entity === entity)
           if (!p) return options.waterColor.withAlpha(0)
+          
           const lifeRatio = p.life / p.maxLife
+          
           // 生命周期初期和末期淡出，中间保持稳定
-          let easedAlpha = alpha
+          let easedAlpha = baseAlpha
           if (lifeRatio < 0.2) {
-            easedAlpha = alpha * (lifeRatio / 0.2)
+            easedAlpha = baseAlpha * (lifeRatio / 0.2)
           } else if (lifeRatio > 0.8) {
-            easedAlpha = alpha * (1 - (lifeRatio - 0.8) / 0.2)
+            easedAlpha = baseAlpha * (1 - (lifeRatio - 0.8) / 0.2)
           }
+
+          // 参考 Three.js 的波浪影响透明度 - 模拟水面反光
+          const waveOffset = this.calculateWaveOffset(
+            p.position.x,
+            p.position.y,
+            p.position.z,
+            this.time,
+            options.waveSpeed,
+            options.waveStrength
+          )
+          
+          // 波浪高亮处透明度更高（模拟反光）
+          const highlightFactor = 1 + waveOffset.z * 0.2
+          easedAlpha = Math.min(1, easedAlpha * highlightFactor)
+          
           return options.waterColor.withAlpha(easedAlpha)
         }, false),
         outlineColor: Cesium.Color.TRANSPARENT,
@@ -247,7 +335,9 @@ export class FountainEffect {
       velocity,
       life: lifeTime,
       maxLife: lifeTime,
-      initialVelocity: velocity.clone()
+      initialVelocity: velocity.clone(),
+      wavePhase,
+      baseSize
     })
   }
 
@@ -297,6 +387,9 @@ export class FountainEffect {
    */
   private updateParticles(dt: number): void {
     const options = this.defaultOptions
+    
+    // 更新时间累积 - 用于波浪动画（参考 Three.js 的 time uniform）
+    this.time += dt
 
     this.particles.forEach((p) => {
       if (p.life > 0) {
@@ -372,6 +465,9 @@ export class FountainEffect {
       this.destroy()
     }
 
+    // 重置时间
+    this.time = 0
+
     this.isActive = true
 
     // 启动粒子生成
@@ -406,6 +502,14 @@ export class FountainEffect {
   }
 
   /**
+   * 更新波浪参数 - 参考 Three.js 的 uniform 参数
+   */
+  updateWaveParams(waveSpeed: number, waveStrength: number): void {
+    this.defaultOptions.waveSpeed = waveSpeed
+    this.defaultOptions.waveStrength = waveStrength
+  }
+
+  /**
    * 获取粒子数量
    */
   getParticleCount(): number {
@@ -431,6 +535,9 @@ export class FountainEffect {
       this.viewer.entities.remove(p.entity)
     })
     this.particles = []
+
+    // 重置时间
+    this.time = 0
 
     this.isActive = false
     console.log('[FountainEffect] Fountain destroyed')

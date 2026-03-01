@@ -90,6 +90,12 @@
             <el-form-item label="烟花庆典">
               <el-switch v-model="showFirework" @change="onFireworkChange" />
             </el-form-item>
+            <el-form-item label="喷泉/水流">
+              <el-switch v-model="showFountain" @change="onFountainChange" />
+            </el-form-item>
+            <el-form-item label="真实水面">
+              <el-switch v-model="showWaterSurface" @change="onWaterSurfaceChange" />
+            </el-form-item>
           </el-form>
         </el-collapse-item>
 
@@ -177,7 +183,10 @@ import {
   PolylineTrailEffect,
   FireSmokeEffect,
   WeatherEffect,
-  FireworkEffect
+  FireworkEffect,
+  FountainEffect,
+  FountainType,
+  WaterSurfaceEffect
 } from '@/cesium/effects'
 import { registerCustomMaterials, setEffectTheme } from '@/cesium/materials/customMaterials'
 import type { DrawResult, CameraPosition } from '@/types/cesium'
@@ -223,6 +232,8 @@ const showFlyLines = ref(false)
 const showFireSmoke = ref(false)
 const showWeather = ref(false)
 const showFirework = ref(false)
+const showFountain = ref(false)
+const showWaterSurface = ref(false)
 const weatherType = ref('rain')
 const rainIntensity = ref(1)
 const windDirection = ref(360)
@@ -633,6 +644,14 @@ const onEffectThemeChange = () => {
   if (showFirework.value) {
     onFireworkChange(false)
     setTimeout(() => onFireworkChange(true), 100)
+  }
+  if (showFountain.value) {
+    onFountainChange(false)
+    setTimeout(() => onFountainChange(true), 100)
+  }
+  if (showWaterSurface.value) {
+    onWaterSurfaceChange(false)
+    setTimeout(() => onWaterSurfaceChange(true), 100)
   }
 }
 
@@ -1046,6 +1065,109 @@ const onFireworkChange = (show: boolean) => {
   } else {
     effectsManager.removeEffect('firework')
     ElMessage.success('烟花庆典特效已关闭')
+  }
+}
+
+/**
+ * 喷泉/水流特效切换
+ */
+const onFountainChange = (show: boolean) => {
+  const manager = getCesiumManager()
+  if (!manager) return
+
+  if (show) {
+    const viewer = manager.getViewer()
+    if (!viewer) return
+
+    console.log('[Map3D] Creating fountain effect...')
+    const fountainEffect = new FountainEffect(viewer)
+
+    // 创建喷泉 - 默认在城市喷泉模式
+    fountainEffect.create({
+      position: {
+        longitude: 116.3920274,
+        latitude: 39.907801,
+        height: 0
+      },
+      type: FountainType.FOUNTAIN,
+      height: 50,
+      particleCount: 300,
+      flowRate: 10,
+      waterColor: Cesium.Color.fromCssColorString('#00aaff').withAlpha(0.8),
+      gravity: 9.8,
+      wind: {
+        direction: 45,
+        speed: 0
+      },
+      width: 10,
+      lifeTime: 3.0
+    })
+
+    effectsManager.addEffect('fountain', fountainEffect)
+    console.log('[Map3D] Fountain effect added to manager')
+
+    // 飞到喷泉附近观察
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(116.3920274, 39.907801, 150),
+      orientation: {
+        heading: Cesium.Math.toRadians(0),
+        pitch: Cesium.Math.toRadians(-20),
+        roll: 0
+      },
+      duration: 2
+    })
+
+    ElMessage.success('喷泉特效已开启')
+  } else {
+    effectsManager.removeEffect('fountain')
+    ElMessage.success('喷泉特效已关闭')
+  }
+}
+
+/**
+ * 真实水面特效切换
+ */
+const onWaterSurfaceChange = (show: boolean) => {
+  const manager = getCesiumManager()
+  if (!manager) return
+
+  if (show) {
+    const viewer = manager.getViewer()
+    if (!viewer) return
+
+    console.log('[Map3D] Creating water surface effect...')
+    const waterSurfaceEffect = new WaterSurfaceEffect(viewer)
+
+    // 创建水面 - 使用 Three.js 风格 Shader 材质
+    waterSurfaceEffect.create({
+      position: {
+        longitude: 116.3920274,
+        latitude: 39.907801,
+        height: 100
+      },
+      radius: 1000,
+      waterColor: Cesium.Color.fromCssColorString('#00aaff').withAlpha(0.8),
+      waveSpeed: 1.0
+    })
+
+    effectsManager.addEffect('waterSurface', waterSurfaceEffect)
+    console.log('[Map3D] Water surface effect added to manager')
+
+    // 飞到水面附近观察 - 倾斜视角
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(116.3920274, 39.907801, 800),
+      orientation: {
+        heading: Cesium.Math.toRadians(0),
+        pitch: Cesium.Math.toRadians(-45),
+        roll: 0
+      },
+      duration: 2
+    })
+
+    ElMessage.success('真实水面特效已开启')
+  } else {
+    effectsManager.removeEffect('waterSurface')
+    ElMessage.success('真实水面特效已关闭')
   }
 }
 </script>

@@ -12,6 +12,7 @@ export { FireSmokeEffect } from './fireSmokeEffect'
 export { WeatherEffect } from './weatherEffect'
 export { FireworkEffect } from './fireworkEffect'
 export { FountainEffect, FountainType } from './fountainEffect'
+export { WaterSurfaceEffect } from './waterSurfaceEffect'
 export type {
   WindField,
   RainOptions,
@@ -25,3 +26,6 @@ export type {
 export type {
   FountainOptions
 } from './fountainEffect'
+export type {
+  WaterSurfaceOptions
+} from './waterSurfaceEffect'
