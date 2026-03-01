@@ -5,6 +5,7 @@
 
 import * as Cesium from 'cesium'
 import type { ViewerOptions } from 'cesium'
+import { registerCustomMaterials } from '../materials/customMaterials'
 
 /**
  * Cesium 配置接口
@@ -133,6 +134,10 @@ export class CesiumManager {
       Cesium.Ion.defaultAccessToken = token
       console.log('[CesiumManager] Cesium Ion defaultAccessToken set successfully')
     }
+
+    // 注册自定义材质
+    registerCustomMaterials()
+    console.log('[CesiumManager] Custom materials registered')
 
     // 创建 Viewer
     this.viewer = new Cesium.Viewer(containerId, {

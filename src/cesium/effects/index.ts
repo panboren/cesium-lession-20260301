@@ -4,7 +4,7 @@
  */
 
 export { EffectsManager, effectsManager } from './effectsManager'
-export { RadarMaterialProperty, RadarEffect } from './radarEffect'
-export { LightWallMaterialProperty, LightWallEffect } from './lightWallEffect'
-export { PolylineTrailMaterialProperty, PolylineTrailEffect } from './polylineTrailEffect'
-export { LightSpreadMaterialProperty, LightSpreadEffect } from './lightSpreadEffect'
+export { RadarEffect } from './radarEffect'
+export { LightWallEffect } from './lightWallEffect'
+export { PolylineTrailEffect } from './polylineTrailEffect'
+export { LightSpreadEffect } from './lightSpreadEffect'

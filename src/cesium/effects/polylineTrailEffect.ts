@@ -1,115 +1,75 @@
 /**
- * 流光线条特效
+ * 飞线特效 - Cesium 1.138+ 优化版本
  */
 
 import * as Cesium from 'cesium'
 
-let typeNum = 0
-
 /**
- * 流光线条材质属性类
+ * 飞线材质属性类
  */
-export class PolylineTrailMaterialProperty {
-  private color: Cesium.Color
-  private num: number
-  private definitionChanged = new Cesium.Event()
-  private params: { uTime: number }
-  private timeValue: number = 0
-  private intervalId: number | null = null
+class FlyLineMaterialProperty implements Cesium.MaterialProperty {
+  private _definitionChanged = new Cesium.Event()
+  private _time = 0
+  private _color: Cesium.Color
+  private _speed: number
+  private _percent: number
+  private _headColor: Cesium.Color
 
-  constructor(color: Cesium.Color = new Cesium.Color(0.7, 0.6, 1.0, 1.0)) {
-    this.color = color
-    typeNum++
-    this.num = typeNum
-    this.params = { uTime: 0 }
-
-    Cesium.Material._materialCache.addMaterial('PolylineTrailMaterial' + this.num, {
-      fabric: {
-        type: 'PolylineTrailMaterial' + this.num,
-        uniforms: {
-          uTime: 0,
-          color: this.color
-        },
-        source: `
-          czm_material czm_getMaterial(czm_materialInput materialInput)
-          {
-            // 生成默认的基础材质
-            czm_material material = czm_getDefaultMaterial(materialInput);
-            // 获取st
-            vec2 st = materialInput.st;
-            // 获取当前帧数,10秒内变化从0-1；
-            float time = fract(czm_frameNumber / (60.0*10.0));
-            time = time * (1.0 + 0.1);
-            // 平滑过渡函数
-            float alpha = smoothstep(time-0.1,time, st.s) * step(-time,-st.s);
-            alpha += 0.05;
-            // 设置材质的透明度
-            material.alpha = alpha;
-            material.diffuse = color.rgb;
-
-            return material;
-          }
-        `
-      }
-    })
-
-    this.startAnimation()
+  constructor(color: Cesium.Color, speed: number, percent: number, headColor?: Cesium.Color) {
+    this._color = color
+    this._speed = speed
+    this._percent = percent
+    this._headColor = headColor || color
   }
 
-  startAnimation(): void {
-    if (this.intervalId) return
-
-    this.intervalId = window.setInterval(() => {
-      this.timeValue += 0.01
-      if (this.timeValue > 1) {
-        this.timeValue = 0
-      }
-      this.params.uTime = this.timeValue
-      this.definitionChanged.raiseEvent(this)
-    }, 16)
+  get definitionChanged(): Cesium.Event {
+    return this._definitionChanged
   }
 
-  stopAnimation(): void {
-    if (this.intervalId) {
-      window.clearInterval(this.intervalId)
-      this.intervalId = null
+  get isConstant(): boolean {
+    return false
+  }
+
+  getType(time: Cesium.JulianDate): string {
+    return 'FlyLine'
+  }
+
+  getValue(time: Cesium.JulianDate, result?: any): any {
+    if (!result) {
+      result = {}
     }
-  }
-
-  getType(): string {
-    return 'PolylineTrailMaterial' + this.num
-  }
-
-  getValue(time: Cesium.JulianDate, result: any): any {
-    if (!result) result = {}
-    result.uTime = this.params.uTime
+    this._time += 0.02
+    result.time = this._time
+    result.color = this._color
+    result.speed = this._speed
+    result.percent = this._percent
+    result.headColor = this._headColor
     return result
   }
 
-  equals(other: any): boolean {
-    return other instanceof PolylineTrailMaterialProperty && this.color.equals(other.color)
-  }
-
-  destroy(): void {
-    this.stopAnimation()
+  equals(other: Cesium.MaterialProperty | undefined): boolean {
+    return (
+      other instanceof FlyLineMaterialProperty &&
+      Cesium.Color.equals(other._color, this._color) &&
+      other._speed === this._speed &&
+      other._percent === this._percent
+    )
   }
 }
 
 /**
- * 飞线特效类
+ * 飞线特效类 - 支持自定义流动材质和内置材质
  */
 export class PolylineTrailEffect {
   private viewer: Cesium.Viewer
   private entities: Cesium.Entity[] = []
-  private material: PolylineTrailMaterialProperty
 
-  constructor(viewer: Cesium.Viewer, color?: Cesium.Color) {
+  constructor(viewer: Cesium.Viewer) {
     this.viewer = viewer
-    this.material = new PolylineTrailMaterialProperty(color)
   }
 
   /**
-   * 创建飞线
+   * 创建飞线 - 使用自定义流动材质
    */
   create(
     startLon: number,
@@ -118,18 +78,51 @@ export class PolylineTrailEffect {
     endLon: number,
     endLat: number,
     endHeight: number,
-    width: number = 2
+    options: {
+      width?: number
+      color?: Cesium.Color
+      speed?: number
+      percent?: number
+      useBuiltIn?: boolean
+      headColor?: Cesium.Color
+    } = {}
   ): Cesium.Entity {
+    const {
+      width = 4,
+      color = Cesium.Color.fromCssColorString('#00f2ff'),
+      speed = 1.0,
+      percent = 0.4,
+      useBuiltIn = false
+    } = options
+
+    // 光头颜色 - 高亮青色
+    const headColor = options.headColor || Cesium.Color.fromCssColorString('#00ffff')
+
+    let material: any
+
+    if (useBuiltIn) {
+      // 使用内置的PolylineGlow材质
+      material = new Cesium.PolylineGlowMaterialProperty({
+        glowPower: 0.3,
+        color: color
+      })
+    } else {
+      // 使用自定义流动材质
+      material = new FlyLineMaterialProperty(color, speed, percent, headColor)
+    }
+
     const entity = this.viewer.entities.add({
+      name: 'flyLine',
       polyline: {
         positions: [
           Cesium.Cartesian3.fromDegrees(startLon, startLat, startHeight),
           Cesium.Cartesian3.fromDegrees(endLon, endLat, endHeight)
         ],
         width: width,
-        material: this.material
+        material: material
       }
     })
+
     this.entities.push(entity)
     return entity
   }
@@ -145,21 +138,29 @@ export class PolylineTrailEffect {
     endLat: number
     endHeight: number
     width?: number
+    color?: Cesium.Color
+    speed?: number
   }>): Cesium.Entity[] {
     const created: Cesium.Entity[] = []
     lines.forEach((line) => {
-      created.push(
-        this.create(
-          line.startLon,
-          line.startLat,
-          line.startHeight,
-          line.endLon,
-          line.endLat,
-          line.endHeight,
-          line.width
-        )
+      const entity = this.create(
+        line.startLon,
+        line.startLat,
+        line.startHeight,
+        line.endLon,
+        line.endLat,
+        line.endHeight,
+        {
+          width: line.width || 4,
+          color: line.color || Cesium.Color.CYAN,
+          speed: line.speed || 1.0
+        }
       )
+      created.push(entity)
     })
+
+    console.log('[PolylineTrailEffect] Created', created.length, 'fly lines')
+
     return created
   }
 
@@ -171,6 +172,12 @@ export class PolylineTrailEffect {
       this.viewer.entities.remove(entity)
     })
     this.entities = []
-    this.material.destroy()
+  }
+
+  /**
+   * 获取所有飞线实体
+   */
+  getEntities(): Cesium.Entity[] {
+    return this.entities
   }
 }

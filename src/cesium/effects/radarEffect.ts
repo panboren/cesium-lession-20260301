@@ -1,102 +1,63 @@
 /**
- * 雷达扫描特效
+ * 雷达扫描特效 - Cesium 1.138+ 优化版本
  */
 
 import * as Cesium from 'cesium'
 
 /**
- * 雷达材质属性类
+ * 雷达材质属性类 - 实现MaterialProperty接口
  */
-export class RadarMaterialProperty {
-  private name: string
-  private definitionChanged = new Cesium.Event()
-  private params: { uTime: number }
-  private timeValue: number = 0
-  private intervalId: number | null = null
+class RadarMaterialProperty implements Cesium.MaterialProperty {
+  private _definitionChanged = new Cesium.Event()
+  private _time = 0
+  private _color: Cesium.Color
+  private _scanSpeed: number
+  private _ringColor: Cesium.Color
+  private _scanColor: Cesium.Color
 
-  constructor(name: string = 'RadarMaterial') {
-    this.name = name
-    this.params = { uTime: 0 }
-
-    Cesium.Material._materialCache.addMaterial('RadarMaterial', {
-      fabric: {
-        type: 'RadarMaterial',
-        uniforms: {
-          uTime: 0
-        },
-        source: `
-          czm_material czm_getMaterial(czm_materialInput materialInput)
-          {
-            // 生成默认的基础材质
-            czm_material material = czm_getDefaultMaterial(materialInput);
-            // 旋转uv
-            vec2 newSt = mat2(
-              cos(uTime),-sin(uTime),
-              sin(uTime),cos(uTime)
-            )*(materialInput.st-0.5);
-
-            newSt = newSt+0.5;
-
-            // 获取st
-            vec2 st = newSt;
-
-            // 设置圆，外部透明，内部不透明
-            float alpha = 1.0 - step(0.5,distance(st,vec2(0.5))) ;
-
-            // 按照角度来设置强弱
-            float angle = atan(st.x-0.5,st.y-0.5);
-            // angle是从-pi到pi的，所以如果要设置从0-1的转变，需要加上pi
-            float strength = (angle+3.1416)/6.2832;
-
-            // 将强弱与透明度结合
-            alpha = alpha*strength;
-            material.alpha = alpha;
-            material.diffuse = vec3(st.x,st.y,1.0);
-            return material;
-          }
-        `
-      }
-    })
-
-    this.startAnimation()
+  constructor(
+    color: Cesium.Color,
+    scanSpeed: number,
+    ringColor?: Cesium.Color,
+    scanColor?: Cesium.Color
+  ) {
+    this._color = color
+    this._scanSpeed = scanSpeed
+    this._ringColor = ringColor || color
+    this._scanColor = scanColor || color
   }
 
-  startAnimation(): void {
-    if (this.intervalId) return
-
-    this.intervalId = window.setInterval(() => {
-      this.timeValue += 0.05
-      if (this.timeValue > 6.28) {
-        this.timeValue = 0
-      }
-      this.params.uTime = this.timeValue
-      this.definitionChanged.raiseEvent(this)
-    }, 16)
+  get definitionChanged(): Cesium.Event {
+    return this._definitionChanged
   }
 
-  stopAnimation(): void {
-    if (this.intervalId) {
-      window.clearInterval(this.intervalId)
-      this.intervalId = null
+  get isConstant(): boolean {
+    return false
+  }
+
+  getType(time: Cesium.JulianDate): string {
+    return 'Radar'
+  }
+
+  getValue(time: Cesium.JulianDate, result?: any): any {
+    if (!result) {
+      result = {}
     }
-  }
-
-  getType(): string {
-    return 'RadarMaterial'
-  }
-
-  getValue(time: Cesium.JulianDate, result: any): any {
-    if (!result) result = {}
-    result.uTime = this.params.uTime
+    this._time += 0.02
+    result.time = this._time
+    result.color = this._color
+    result.scanSpeed = this._scanSpeed
+    result.ringColor = this._ringColor
+    result.scanColor = this._scanColor
     return result
   }
 
-  equals(other: any): boolean {
-    return other instanceof RadarMaterialProperty && this.name === other.name
-  }
-
-  destroy(): void {
-    this.stopAnimation()
+  equals(other: Cesium.MaterialProperty | undefined): boolean {
+    return (
+      other instanceof RadarMaterialProperty &&
+      Cesium.Color.equals(other._color, this._color) &&
+      other._scanSpeed === this._scanSpeed
+    )
   }
 }
 
@@ -106,29 +67,59 @@ export class RadarMaterialProperty {
 export class RadarEffect {
   private viewer: Cesium.Viewer
   private entity: Cesium.Entity | null = null
-  private material: RadarMaterialProperty
+  private materialProperty: RadarMaterialProperty | null = null
 
   constructor(viewer: Cesium.Viewer) {
     this.viewer = viewer
-    this.material = new RadarMaterialProperty('RadarMaterial')
   }
 
   /**
    * 在指定位置创建雷达
+   * @param centerLon 中心经度
+   * @param centerLat 中心纬度
+   * @param radius 半径（米）
    */
   create(
-    west: number,
-    south: number,
-    east: number,
-    north: number
+    centerLon: number,
+    centerLat: number,
+    radius: number = 5000,
+    options: {
+      color?: Cesium.Color
+      scanSpeed?: number
+      height?: number
+      ringColor?: Cesium.Color
+      scanColor?: Cesium.Color
+    } = {}
   ): Cesium.Entity {
+    // 科技感配色 - 青色系
+    const { color = Cesium.Color.CYAN.withAlpha(0.3), scanSpeed = 0.25, height = 100 } = options
+
+    // 扫描线颜色 - 高亮青色
+    const scanColor = options.scanColor || Cesium.Color.fromCssColorString('#00ffff')
+
+    // 圆环颜色 - 稍暗的青色
+    const ringColor = options.ringColor || Cesium.Color.fromCssColorString('#00cccc')
+
+    // 创建材质属性实例
+    this.materialProperty = new RadarMaterialProperty(color, scanSpeed, ringColor, scanColor)
+
+    // 创建圆形雷达
     this.entity = this.viewer.entities.add({
       name: 'radar',
-      rectangle: {
-        coordinates: Cesium.Rectangle.fromDegrees(west, south, east, north),
-        material: this.material
+      position: Cesium.Cartesian3.fromDegrees(centerLon, centerLat, height),
+      ellipse: {
+        semiMinorAxis: radius,
+        semiMajorAxis: radius,
+        material: this.materialProperty,
+        height: height,
+        outline: true,
+        outlineColor: scanColor.withAlpha(0.6),
+        outlineWidth: 2
       }
     })
+
+    console.log('[RadarEffect] Tech-style radar created at', centerLon, centerLat, 'radius:', radius)
+
     return this.entity
   }
 
@@ -140,6 +131,25 @@ export class RadarEffect {
       this.viewer.entities.remove(this.entity)
       this.entity = null
     }
-    this.material.destroy()
+
+    this.materialProperty = null
+  }
+
+  /**
+   * 更新颜色
+   */
+  setColor(color: Cesium.Color): void {
+    if (this.materialProperty) {
+      this.materialProperty._color = color
+    }
+  }
+
+  /**
+   * 更新扫描速度
+   */
+  setScanSpeed(speed: number): void {
+    if (this.materialProperty) {
+      this.materialProperty._scanSpeed = speed
+    }
   }
 }

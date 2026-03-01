@@ -416,9 +416,13 @@ const onRadarChange = (show: boolean) => {
     const viewer = manager.getViewer()
     if (!viewer) return
 
-    // 在北京位置创建雷达
+    // 在北京位置创建圆形雷达 - 使用新的优化参数
     const radarEffect = new RadarEffect(viewer)
-    radarEffect.create(116.35, 39.88, 116.43, 39.93)
+    radarEffect.create(116.39, 39.91, 5000, {
+      color: Cesium.Color.CYAN,
+      scanSpeed: 0.3,
+      height: 100
+    })
     effectsManager.addEffect('radar', radarEffect)
     ElMessage.success('雷达特效已开启')
 
@@ -449,18 +453,22 @@ const onLightWallChange = (show: boolean) => {
     const viewer = manager.getViewer()
     if (!viewer) return
 
-    // 在北京创建光墙
+    // 在北京创建光墙 - 使用新的优化参数
     console.log('[Map3D] Creating light wall effect...')
     const lightWallEffect = new LightWallEffect(viewer)
     lightWallEffect.create(
-      [116.35, 39.88, 116.43, 39.88, 116.43, 39.93, 116.35, 39.93, 116.35, 39.88],
+      [116.35, 39.88, 116.43, 39.88, 116.43, 39.93, 116.35, 39.93],
       800,
-      '科技园光墙'
+      {
+        color: Cesium.Color.CYAN,
+        direction: 1.0,
+        minHeight: 0
+      }
     )
     effectsManager.addEffect('lightWall', lightWallEffect)
     console.log('[Map3D] Light wall effect added to manager')
 
-    // 飞到光墙上方观察（调整相机到更合适的位置）
+    // 飞到光墙上方观察
     console.log('[Map3D] Flying to light wall position...')
     viewer.camera.flyTo({
       destination: Cesium.Cartesian3.fromDegrees(116.396187, 39.80553, 10802.43),
@@ -490,9 +498,14 @@ const onLightSpreadChange = (show: boolean) => {
     const viewer = manager.getViewer()
     if (!viewer) return
 
-    // 在北京创建流光扩散
+    // 在北京创建流光扩散 - 使用新的优化参数
     const lightSpreadEffect = new LightSpreadEffect(viewer)
-    lightSpreadEffect.create(116.35, 39.88, 116.43, 39.93, true)
+    lightSpreadEffect.create(116.35, 39.88, 116.43, 39.93, {
+      color: new Cesium.Color(0.3, 0.8, 1.0, 1.0),
+      waveCount: 4,
+      height: 100,
+      animate: true
+    })
     effectsManager.addEffect('lightSpread', lightSpreadEffect)
     ElMessage.success('流光扩散特效已开启')
   } else {
@@ -512,7 +525,7 @@ const onFlyLinesChange = (show: boolean) => {
     const viewer = manager.getViewer()
     if (!viewer) return
 
-    // 创建多条飞线
+    // 创建多条飞线 - 使用新的优化参数
     const lines: Array<{
       startLon: number
       startLat: number
@@ -521,6 +534,8 @@ const onFlyLinesChange = (show: boolean) => {
       endLat: number
       endHeight: number
       width?: number
+      color?: Cesium.Color
+      speed?: number
     }> = []
 
     // 生成随机飞线
@@ -533,18 +548,31 @@ const onFlyLinesChange = (show: boolean) => {
       lines.push({
         startLon,
         startLat,
-        startHeight: 100,
+        startHeight: 500,
         endLon,
         endLat,
-        endHeight: 500 + Math.random() * 1000,
-        width: 2
+        endHeight: 2000 + Math.random() * 2000,
+        width: 4,
+        color: Cesium.Color.CYAN,
+        speed: 1.0 + Math.random() * 0.5
       })
     }
 
-    const flyLineEffect = new PolylineTrailEffect(viewer, Cesium.Color.CYAN)
+    const flyLineEffect = new PolylineTrailEffect(viewer)
     flyLineEffect.createMultiple(lines)
     effectsManager.addEffect('flyLines', flyLineEffect)
     ElMessage.success('飞线特效已开启')
+
+    // 飞到预设视角
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(116.396187, 39.80553, 10802.43),
+      orientation: {
+        heading: Cesium.Math.toRadians(0),
+        pitch: Cesium.Math.toRadians(-45),
+        roll: 0
+      },
+      duration: 2
+    })
   } else {
     effectsManager.removeEffect('flyLines')
     ElMessage.success('飞线特效已关闭')
