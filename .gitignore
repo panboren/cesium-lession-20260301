@@ -55,3 +55,6 @@ coverage
 # 打包分析
 stats.html
 report.html
+
+# 源码参考（不提交）
+src/views/Map3D/源码

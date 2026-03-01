@@ -105,17 +105,19 @@ const layerTreeData = ref([
     id: 'imagery-layers',
     label: '影像图层',
     children: [
-      { id: 'gaode', label: '高德地图' },
-      { id: 'bing', label: 'Bing 地图' },
-      { id: 'osm', label: 'OpenStreetMap' }
+      { id: 'gaode-vector', label: '高德矢量地图' },
+      { id: 'gaode-satellite', label: '高德卫星图' },
+      { id: 'gaode-hybrid', label: '高德混合图' }
     ]
   },
   {
     id: 'terrain-layers',
     label: '地形图层',
     children: [
-      { id: 'arcgis', label: 'ArcGIS 地形' },
-      { id: 'cesium', label: 'Cesium Ion 地形' }
+      { id: 'simple', label: '简单地形' },
+      { id: 'custom', label: '自定义地形（波形）' },
+      { id: 'cesium-high', label: 'Cesium Ion 高精度地形' },
+      { id: 'arcgis', label: 'ArcGIS 地形' }
     ]
   }
 ])
@@ -184,7 +186,7 @@ const onLayerCheck = (data: any, checked: any) => {
   console.log('[Layer] Checked nodes:', checkedKeys)
 
   // 影像图层切换（单选逻辑）
-  const imageryProviders = ['gaode', 'bing', 'osm']
+  const imageryProviders = ['gaode-vector', 'gaode-satellite', 'gaode-hybrid']
   const selectedImagery = imageryProviders.find((key) => checkedKeys.includes(key))
 
   if (selectedImagery) {
@@ -193,15 +195,29 @@ const onLayerCheck = (data: any, checked: any) => {
   }
 
   // 地形图层切换（单选逻辑）
-  const terrainProviders = ['cesium', 'arcgis']
+  const terrainProviders = ['simple', 'custom', 'cesium-high', 'arcgis']
   const selectedTerrain = terrainProviders.find((key) => checkedKeys.includes(key))
 
-  if (selectedTerrain === 'cesium') {
+  if (selectedTerrain === 'simple') {
+    currentTerrainType.value = 'simple'
+    showTerrain.value = true
+    cesiumService
+      .setTerrainProvider('simple')
+      .then(() => ElMessage.success('已切换到简单地形'))
+      .catch(() => ElMessage.error('简单地形加载失败'))
+  } else if (selectedTerrain === 'custom') {
+    currentTerrainType.value = 'custom'
+    showTerrain.value = true
+    cesiumService
+      .setTerrainProvider('custom')
+      .then(() => ElMessage.success('已切换到自定义地形'))
+      .catch(() => ElMessage.error('自定义地形加载失败'))
+  } else if (selectedTerrain === 'cesium-high') {
     currentTerrainType.value = 'cesium-ion'
     showTerrain.value = true
     cesiumService
       .setTerrainProvider('cesium-ion')
-      .then(() => ElMessage.success('已切换到 Cesium Ion 地形'))
+      .then(() => ElMessage.success('已切换到 Cesium Ion 高精度地形'))
       .catch(() => ElMessage.error('Cesium Ion 地形加载失败'))
   } else if (selectedTerrain === 'arcgis') {
     currentTerrainType.value = 'arcgis'
@@ -225,10 +241,12 @@ const onLayerCheck = (data: any, checked: any) => {
  */
 const getLayerName = (id: string): string => {
   const nameMap: Record<string, string> = {
-    gaode: '高德地图',
-    bing: 'Bing 地图',
-    osm: 'OpenStreetMap',
-    cesium: 'Cesium Ion 地形',
+    'gaode-vector': '高德矢量地图',
+    'gaode-satellite': '高德卫星图',
+    'gaode-hybrid': '高德混合图',
+    simple: '简单地形',
+    custom: '自定义地形（波形）',
+    'cesium-high': 'Cesium Ion 高精度地形',
     arcgis: 'ArcGIS 地形'
   }
   return nameMap[id] || id

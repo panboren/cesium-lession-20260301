@@ -312,7 +312,7 @@ export class CesiumService {
 
   /**
    * 设置影像图层提供者
-   * @param providerType 影像类型: 'gaode' | 'bing' | 'osm'
+   * @param providerType 影像类型: 'gaode-vector' | 'gaode-satellite' | 'gaode-hybrid' | 'bing' | 'osm'
    */
   setImageryProvider(providerType: string): void {
     try {
@@ -332,31 +332,88 @@ export class CesiumService {
 
       // 移除所有现有的影像图层（除了基础图层）
       const imageryLayers = viewer.imageryLayers
+      console.log('[CesiumService] Before remove, layers count:', imageryLayers.length)
       imageryLayers.removeAll()
+      console.log('[CesiumService] After remove, layers count:', imageryLayers.length)
 
       let provider: Cesium.ImageryProvider
 
       switch (providerType) {
-        case 'gaode':
-          // 高德地图
+        case 'gaode-vector':
+          // 高德矢量地图 - 使用多个子域名
           provider = new Cesium.UrlTemplateImageryProvider({
-            url: 'https://webst02.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
-            credit: '高德地图',
+            url: 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+            subdomains: ['1', '2', '3', '4'],
+            credit: '高德矢量地图',
             maximumLevel: 18
           })
-          console.log('[CesiumService] Gaode imagery provider loaded')
-          logger.info('Gaode imagery provider enabled')
+          console.log('[CesiumService] Gaode Vector imagery provider loaded')
+          logger.info('Gaode Vector imagery provider enabled')
           break
 
-        case 'bing':
-          // Bing 地图
-          provider = new Cesium.BingMapsImageryProvider({
-            url: 'https://dev.virtualearth.net',
-            key: process.env.VITE_BING_MAPS_KEY || '',
-            mapStyle: Cesium.BingMapsStyle.AERIAL_WITH_LABELS
+        case 'gaode-satellite':
+          // 高德卫星图 - 使用 wprd 服务器
+          provider = new Cesium.UrlTemplateImageryProvider({
+            url: 'https://wprd0{s}.is.autonavi.com/appmaptile?x={x}&y={y}&z={z}&lang=zh_cn&size=1&scl=1&style=6',
+            subdomains: ['1', '2', '3', '4'],
+            credit: '高德卫星图',
+            maximumLevel: 18,
+            tilingScheme: new Cesium.WebMercatorTilingScheme()
           })
-          console.log('[CesiumService] Bing imagery provider loaded')
-          logger.info('Bing imagery provider enabled')
+          console.log('[CesiumService] Gaode Satellite imagery provider loaded')
+          logger.info('Gaode Satellite imagery provider enabled')
+          break
+
+        case 'gaode-hybrid':
+          // 高德混合图（卫星图 + 注记）
+          const satelliteProvider = new Cesium.UrlTemplateImageryProvider({
+            url: 'https://wprd0{s}.is.autonavi.com/appmaptile?x={x}&y={y}&z={z}&lang=zh_cn&size=1&scl=1&style=6',
+            subdomains: ['1', '2', '3', '4'],
+            credit: '高德卫星图',
+            maximumLevel: 18,
+            tilingScheme: new Cesium.WebMercatorTilingScheme()
+          })
+          console.log('[CesiumService] Gaode Hybrid satellite layer loaded')
+          // 添加卫星底图
+          imageryLayers.addImageryProvider(satelliteProvider)
+          // 添加注记图层
+          const labelProvider = new Cesium.UrlTemplateImageryProvider({
+            url: 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+            subdomains: ['1', '2', '3', '4'],
+            credit: '高德注记',
+            maximumLevel: 18
+          })
+          imageryLayers.addImageryProvider(labelProvider)
+          console.log('[CesiumService] Gaode Hybrid imagery provider loaded')
+          logger.info('Gaode Hybrid imagery provider enabled')
+          // 飞向北京
+          viewer.camera.flyTo({
+            destination: Cesium.Cartesian3.fromDegrees(116.3912, 39.9075, 10000),
+            duration: 0.5
+          })
+          viewer.scene.requestRender()
+          return // 已经添加了两个图层，直接返回
+
+        case 'bing':
+          // Bing 地图 - 需要配置 Bing Maps Key
+          const bingKey = import.meta.env.VITE_BING_MAPS_KEY || ''
+          if (!bingKey) {
+            console.warn('[CesiumService] Bing Maps Key not configured, falling back to OSM')
+            // 如果没有配置 Bing Key，回退到 OSM
+            provider = new Cesium.OpenStreetMapImageryProvider({
+              url: 'https://tile.openstreetmap.org/'
+            })
+            console.log('[CesiumService] OSM imagery provider loaded (fallback from Bing)')
+            logger.info('OSM imagery provider enabled (fallback from Bing)')
+          } else {
+            provider = new Cesium.BingMapsImageryProvider({
+              url: 'https://dev.virtualearth.net',
+              key: bingKey,
+              mapStyle: Cesium.BingMapsStyle.AERIAL_WITH_LABELS
+            })
+            console.log('[CesiumService] Bing imagery provider loaded')
+            logger.info('Bing imagery provider enabled')
+          }
           break
 
         case 'osm':
@@ -371,7 +428,14 @@ export class CesiumService {
       }
 
       imageryLayers.addImageryProvider(provider)
-      console.log('[CesiumService] Imagery provider set successfully')
+      console.log('[CesiumService] Imagery provider set successfully, layers count:', imageryLayers.length)
+      console.log('[CesiumService] First layer ready:', imageryLayers.get(0)?.ready)
+
+      // 影像图层切换后飞向北京
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(116.3912, 39.9075, 10000),
+        duration: 0.5
+      })
 
       viewer.scene.requestRender()
     } catch (error) {
@@ -390,7 +454,9 @@ export class CesiumService {
   static readonly TerrainType = {
     NONE: 'none',
     CESIUM_ION: 'cesium-ion',
-    ARCGIS: 'arcgis'
+    ARCGIS: 'arcgis',
+    SIMPLE: 'simple',
+    CUSTOM: 'custom'
   } as const
 
   /**
@@ -425,9 +491,72 @@ export class CesiumService {
       console.log('[CesiumService] Setting terrain provider to:', terrainType)
 
       switch (terrainType) {
+        case CesiumService.TerrainType.SIMPLE:
+          // 简单地形 - 使用更轻量的 Cesium Ion 地形
+          console.log('[CesiumService] Loading Simple Terrain...')
+          try {
+            const terrain = await Cesium.Terrain.fromWorldTerrain()
+            await viewer.scene.setTerrain(terrain)
+            viewer.scene.globe.enableLighting = true
+            // 启用地形深度测试，使地形更明显
+            viewer.scene.globe.depthTestAgainstTerrain = true
+            console.log('[CesiumService] Simple Terrain loaded successfully')
+            logger.info('Simple Terrain enabled')
+          } catch (error) {
+            console.error('[CesiumService] Failed to load Simple terrain:', error)
+            logger.warn('Failed to load Simple terrain', error)
+            handleError(error, {
+              showMessage: true,
+              message: '简单地形加载失败。请检查 token 配置。'
+            })
+            throw error
+          }
+          break
+
+        case CesiumService.TerrainType.CUSTOM:
+          // 自定义地形 - 使用正弦波模拟地形，增强高度对比
+          console.log('[CesiumService] Loading Custom Terrain...')
+          try {
+            const width = 64
+            const height = 64
+            const provider = new Cesium.CustomHeightmapTerrainProvider({
+              width,
+              height,
+              callback: (x: number, y: number, level: number) => {
+                const buffer = new Float32Array(width * height)
+                for (let yy = 0; yy < height; yy++) {
+                  for (let xx = 0; xx < width; xx++) {
+                    const u = (x + xx / (width - 1)) / Math.pow(2, level)
+                    const v = (y + yy / (height - 1)) / Math.pow(2, level)
+                    // 增强波形地形的高度，使其更明显
+                    const heightValue = 5000 * (Math.sin(8000 * v) * 0.5 + 0.5) +
+                                       3000 * (Math.cos(6000 * u) * 0.5 + 0.5)
+                    const index = yy * width + xx
+                    buffer[index] = heightValue
+                  }
+                }
+                return buffer
+              }
+            })
+            await viewer.scene.setTerrain(new Cesium.Terrain(provider))
+            viewer.scene.globe.enableLighting = true
+            viewer.scene.globe.depthTestAgainstTerrain = true
+            console.log('[CesiumService] Custom Terrain loaded successfully')
+            logger.info('Custom Terrain enabled')
+          } catch (error) {
+            console.error('[CesiumService] Failed to load Custom terrain:', error)
+            logger.warn('Failed to load Custom terrain', error)
+            handleError(error, {
+              showMessage: true,
+              message: '自定义地形加载失败。'
+            })
+            throw error
+          }
+          break
+
         case CesiumService.TerrainType.CESIUM_ION:
-          // Cesium Ion 地形
-          console.log('[CesiumService] Loading Cesium World Terrain...')
+          // Cesium Ion 高精度地形（带水体和法线）
+          console.log('[CesiumService] Loading Cesium Ion High Precision Terrain...')
           try {
             const terrain = await Cesium.Terrain.fromWorldTerrain({
               requestWaterMask: true,
@@ -435,14 +564,15 @@ export class CesiumService {
             })
             await viewer.scene.setTerrain(terrain)
             viewer.scene.globe.enableLighting = true
-            console.log('[CesiumService] Cesium World Terrain loaded successfully')
-            logger.info('Cesium Ion Terrain enabled')
+            viewer.scene.globe.depthTestAgainstTerrain = true
+            console.log('[CesiumService] Cesium Ion High Precision Terrain loaded successfully')
+            logger.info('Cesium Ion High Precision Terrain enabled')
           } catch (error) {
             console.error('[CesiumService] Failed to load Cesium Ion terrain:', error)
             logger.warn('Failed to load Cesium Ion terrain', error)
             handleError(error, {
               showMessage: true,
-              message: 'Cesium Ion 地形加载失败。请检查 token 配置。'
+              message: 'Cesium Ion 高精度地形加载失败。请检查 token 配置。'
             })
             throw error
           }
@@ -459,6 +589,7 @@ export class CesiumService {
             )
             await viewer.scene.setTerrain(terrain)
             viewer.scene.globe.enableLighting = true
+            viewer.scene.globe.depthTestAgainstTerrain = true
             console.log('[CesiumService] ArcGIS Terrain loaded successfully')
             logger.info('ArcGIS Terrain enabled')
           } catch (error) {
@@ -479,10 +610,17 @@ export class CesiumService {
           const ellipsoidProvider = new Cesium.EllipsoidTerrainProvider()
           await viewer.scene.setTerrain(new Cesium.Terrain(ellipsoidProvider))
           viewer.scene.globe.enableLighting = false
+          viewer.scene.globe.depthTestAgainstTerrain = false
           console.log('[CesiumService] Terrain disabled')
           logger.info('Terrain disabled')
           break
       }
+
+      // 所有地形切换后都飞向北京
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(116.3912, 39.9075, 10000),
+        duration: 0.5
+      })
 
       viewer.scene.requestRender()
     } catch (error) {
