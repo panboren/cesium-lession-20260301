@@ -1,0 +1,58 @@
+/* 主题变量 - 使用 CSS 变量实现动态主题 */
+
+:root {
+  /* Element Plus 主题色 */
+  --el-color-primary: #409eff;
+  
+  /* 左侧菜单主题 */
+  --left-menu-border-color: inherit;
+  --left-menu-bg-color: #001529;
+  --left-menu-bg-active-color: #409eff;
+  --left-menu-text-color: #bfcbd9;
+  --left-menu-text-active-color: #fff;
+  
+  /* Logo 标题颜色 */
+  --logo-title-text-color: #fff;
+  
+  /* 顶部头部主题 */
+  --top-header-bg-color: #fff;
+  --top-header-text-color: inherit;
+  --top-header-hover-color: #f6f6f6;
+}
+
+/* 暗黑模式 */
+html.dark {
+  --el-color-primary: #409eff;
+  
+  --left-menu-border-color: inherit;
+  --left-menu-bg-color: #1f1f1f;
+  --left-menu-bg-active-color: #409eff;
+  --left-menu-text-color: #a3a3a3;
+  --left-menu-text-active-color: #fff;
+  
+  --logo-title-text-color: #fff;
+  
+  --top-header-bg-color: #1f1f1f;
+  --top-header-text-color: #e5e5e5;
+  --top-header-hover-color: #2a2a2a;
+}
+
+/* 自定义样式 */
+.app-header {
+  background-color: var(--top-header-bg-color);
+}
+
+.left-menu {
+  background-color: var(--left-menu-bg-color);
+  border-right: 1px solid var(--left-menu-border-color);
+}
+
+.left-menu-item {
+  color: var(--left-menu-text-color);
+  
+  &:hover,
+  &.is-active {
+    background-color: var(--left-menu-bg-active-color);
+    color: var(--left-menu-text-active-color);
+  }
+}
