@@ -124,6 +124,7 @@ const contrast = ref(1)
 const opacity = ref(1)
 const sceneMode = ref('SCENE3D')
 const showTerrain = ref(false)
+const currentTerrainType = ref('none')
 const showAtmosphere = ref(true)
 const drawResults = ref<DrawResult[]>([])
 const cameraInfo = ref<CameraPosition | null>(null)
@@ -178,8 +179,59 @@ const addSampleMarkers = async () => {
 /**
  * 图层选择
  */
-const onLayerCheck = (data: unknown, checked: unknown) => {
-  // 图层选择逻辑
+const onLayerCheck = (data: any, checked: any) => {
+  const checkedKeys = checked.checkedKeys
+  console.log('[Layer] Checked nodes:', checkedKeys)
+
+  // 影像图层切换（单选逻辑）
+  const imageryProviders = ['gaode', 'bing', 'osm']
+  const selectedImagery = imageryProviders.find((key) => checkedKeys.includes(key))
+
+  if (selectedImagery) {
+    cesiumService.setImageryProvider(selectedImagery)
+    ElMessage.success(`已切换到 ${getLayerName(selectedImagery)}`)
+  }
+
+  // 地形图层切换（单选逻辑）
+  const terrainProviders = ['cesium', 'arcgis']
+  const selectedTerrain = terrainProviders.find((key) => checkedKeys.includes(key))
+
+  if (selectedTerrain === 'cesium') {
+    currentTerrainType.value = 'cesium-ion'
+    showTerrain.value = true
+    cesiumService
+      .setTerrainProvider('cesium-ion')
+      .then(() => ElMessage.success('已切换到 Cesium Ion 地形'))
+      .catch(() => ElMessage.error('Cesium Ion 地形加载失败'))
+  } else if (selectedTerrain === 'arcgis') {
+    currentTerrainType.value = 'arcgis'
+    showTerrain.value = true
+    cesiumService
+      .setTerrainProvider('arcgis')
+      .then(() => ElMessage.success('已切换到 ArcGIS 地形'))
+      .catch(() => ElMessage.error('ArcGIS 地形加载失败'))
+  } else {
+    // 如果没有选中任何地形图层，禁用地形
+    currentTerrainType.value = 'none'
+    showTerrain.value = false
+    cesiumService.setTerrainProvider('none').then(() => {
+      console.log('[Layer] Terrain disabled')
+    })
+  }
+}
+
+/**
+ * 获取图层名称
+ */
+const getLayerName = (id: string): string => {
+  const nameMap: Record<string, string> = {
+    gaode: '高德地图',
+    bing: 'Bing 地图',
+    osm: 'OpenStreetMap',
+    cesium: 'Cesium Ion 地形',
+    arcgis: 'ArcGIS 地形'
+  }
+  return nameMap[id] || id
 }
 
 /**

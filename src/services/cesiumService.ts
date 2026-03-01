@@ -311,9 +311,10 @@ export class CesiumService {
   }
 
   /**
-   * 设置地形显示
+   * 设置影像图层提供者
+   * @param providerType 影像类型: 'gaode' | 'bing' | 'osm'
    */
-  async setTerrain(show: boolean): Promise<void> {
+  setImageryProvider(providerType: string): void {
     try {
       const manager = getCesiumManager()
       if (!manager) {
@@ -327,62 +328,167 @@ export class CesiumService {
         return
       }
 
-      console.log('[CesiumService] Setting terrain to:', show)
-      console.log('[CesiumService] Current Ion token exists:', !!Cesium.Ion.defaultAccessToken)
+      console.log('[CesiumService] Setting imagery provider to:', providerType)
 
-      if (show) {
-        // 使用 Cesium 推荐的方式：viewer.scene.setTerrain()
-        // 参考：https://sandcastle.cesium.com/
-        try {
+      // 移除所有现有的影像图层（除了基础图层）
+      const imageryLayers = viewer.imageryLayers
+      imageryLayers.removeAll()
+
+      let provider: Cesium.ImageryProvider
+
+      switch (providerType) {
+        case 'gaode':
+          // 高德地图
+          provider = new Cesium.UrlTemplateImageryProvider({
+            url: 'https://webst02.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
+            credit: '高德地图',
+            maximumLevel: 18
+          })
+          console.log('[CesiumService] Gaode imagery provider loaded')
+          logger.info('Gaode imagery provider enabled')
+          break
+
+        case 'bing':
+          // Bing 地图
+          provider = new Cesium.BingMapsImageryProvider({
+            url: 'https://dev.virtualearth.net',
+            key: process.env.VITE_BING_MAPS_KEY || '',
+            mapStyle: Cesium.BingMapsStyle.AERIAL_WITH_LABELS
+          })
+          console.log('[CesiumService] Bing imagery provider loaded')
+          logger.info('Bing imagery provider enabled')
+          break
+
+        case 'osm':
+        default:
+          // OpenStreetMap
+          provider = new Cesium.OpenStreetMapImageryProvider({
+            url: 'https://tile.openstreetmap.org/'
+          })
+          console.log('[CesiumService] OSM imagery provider loaded')
+          logger.info('OSM imagery provider enabled')
+          break
+      }
+
+      imageryLayers.addImageryProvider(provider)
+      console.log('[CesiumService] Imagery provider set successfully')
+
+      viewer.scene.requestRender()
+    } catch (error) {
+      console.error('[CesiumService] Error setting imagery provider:', error)
+      logger.error('Error setting imagery provider:', error)
+      handleError(error, {
+        showMessage: true,
+        message: '影像图层切换失败'
+      })
+    }
+  }
+
+  /**
+   * 地形类型枚举
+   */
+  static readonly TerrainType = {
+    NONE: 'none',
+    CESIUM_ION: 'cesium-ion',
+    ARCGIS: 'arcgis'
+  } as const
+
+  /**
+   * 设置地形显示
+   */
+  async setTerrain(show: boolean): Promise<void> {
+    if (show) {
+      await this.setTerrainProvider(CesiumService.TerrainType.CESIUM_ION)
+    } else {
+      await this.setTerrainProvider(CesiumService.TerrainType.NONE)
+    }
+  }
+
+  /**
+   * 设置地形提供者
+   * @param terrainType 地形类型: 'none' | 'cesium-ion' | 'arcgis'
+   */
+  async setTerrainProvider(terrainType: string): Promise<void> {
+    try {
+      const manager = getCesiumManager()
+      if (!manager) {
+        logger.warn('Cesium Manager not initialized')
+        return
+      }
+
+      const viewer = manager.getViewer()
+      if (!viewer) {
+        logger.warn('Cesium Viewer not initialized')
+        return
+      }
+
+      console.log('[CesiumService] Setting terrain provider to:', terrainType)
+
+      switch (terrainType) {
+        case CesiumService.TerrainType.CESIUM_ION:
+          // Cesium Ion 地形
           console.log('[CesiumService] Loading Cesium World Terrain...')
+          try {
+            const terrain = await Cesium.Terrain.fromWorldTerrain({
+              requestWaterMask: true,
+              requestVertexNormals: true
+            })
+            await viewer.scene.setTerrain(terrain)
+            viewer.scene.globe.enableLighting = true
+            console.log('[CesiumService] Cesium World Terrain loaded successfully')
+            logger.info('Cesium Ion Terrain enabled')
+          } catch (error) {
+            console.error('[CesiumService] Failed to load Cesium Ion terrain:', error)
+            logger.warn('Failed to load Cesium Ion terrain', error)
+            handleError(error, {
+              showMessage: true,
+              message: 'Cesium Ion 地形加载失败。请检查 token 配置。'
+            })
+            throw error
+          }
+          break
 
-          // 使用 Cesium.Terrain.fromWorldTerrain() 创建地形
-          // 这个方法会自动使用配置的 Ion token
-          const terrain = await Cesium.Terrain.fromWorldTerrain({
-            requestWaterMask: true,
-            requestVertexNormals: true
-          })
+        case CesiumService.TerrainType.ARCGIS:
+          // ArcGIS 地形
+          console.log('[CesiumService] Loading ArcGIS Terrain...')
+          try {
+            const terrain = new Cesium.Terrain(
+              Cesium.ArcGISTiledElevationTerrainProvider.fromUrl(
+                'https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer'
+              )
+            )
+            await viewer.scene.setTerrain(terrain)
+            viewer.scene.globe.enableLighting = true
+            console.log('[CesiumService] ArcGIS Terrain loaded successfully')
+            logger.info('ArcGIS Terrain enabled')
+          } catch (error) {
+            console.error('[CesiumService] Failed to load ArcGIS terrain:', error)
+            logger.warn('Failed to load ArcGIS terrain', error)
+            handleError(error, {
+              showMessage: true,
+              message: 'ArcGIS 地形加载失败。'
+            })
+            throw error
+          }
+          break
 
-          // 使用 setTerrain 方法设置地形（Cesium 推荐的方式）
-          await viewer.scene.setTerrain(terrain)
-
-          console.log('[CesiumService] Cesium World Terrain loaded successfully')
-          logger.info('Cesium World Terrain enabled')
-
-          // 启用地形光照效果，使地形更明显
-          viewer.scene.globe.enableLighting = true
-        } catch (error) {
-          console.error('[CesiumService] Failed to load terrain:', error)
-          logger.warn('Failed to load terrain, using simple terrain instead', error)
-
-          // 显示错误信息
-          handleError(error, {
-            showMessage: true,
-            message: '地形加载失败。请检查 Cesium Ion token 配置。'
-          })
-
-          // 回退到无地形
-          await viewer.scene.setTerrain()
+        case CesiumService.TerrainType.NONE:
+        default:
+          // 无地形（椭球体）
+          console.log('[CesiumService] Removing terrain (using EllipsoidTerrainProvider)')
+          const ellipsoidProvider = new Cesium.EllipsoidTerrainProvider()
+          await viewer.scene.setTerrain(new Cesium.Terrain(ellipsoidProvider))
           viewer.scene.globe.enableLighting = false
-          logger.info('No terrain (fallback)')
-        }
-      } else {
-        // 禁用地形 - 使用 EllipsoidTerrainProvider 替换为平面地球
-        console.log('[CesiumService] Removing terrain')
-        const ellipsoidProvider = new Cesium.EllipsoidTerrainProvider()
-        await viewer.scene.setTerrain(new Cesium.Terrain(ellipsoidProvider))
-        viewer.scene.globe.enableLighting = false
-        logger.info('Terrain disabled')
+          console.log('[CesiumService] Terrain disabled')
+          logger.info('Terrain disabled')
+          break
       }
 
       viewer.scene.requestRender()
     } catch (error) {
-      console.error('[CesiumService] Error setting terrain:', error)
-      logger.error('Error setting terrain:', error)
-      handleError(error, {
-        showMessage: true,
-        message: '地形设置失败'
-      })
+      console.error('[CesiumService] Error setting terrain provider:', error)
+      logger.error('Error setting terrain provider:', error)
+      throw error
     }
   }
 
