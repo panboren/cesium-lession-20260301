@@ -186,10 +186,11 @@ const onLayerCheck = (data: unknown, checked: unknown) => {
  * 地图样式变化
  */
 const onStyleChange = () => {
-  const manager = cesiumService.getCameraPosition()
-  if (!manager) return
-
-  // TODO: 实现地图样式调整
+  cesiumService.setMapStyle({
+    brightness: brightness.value,
+    contrast: contrast.value,
+    opacity: opacity.value
+  })
 }
 
 /**
@@ -209,14 +210,14 @@ const onSceneModeChange = (mode: string) => {
  * 地形显示变化
  */
 const onTerrainChange = (show: boolean) => {
-  // TODO: 实现地形切换
+  cesiumService.setTerrain(show)
 }
 
 /**
  * 大气显示变化
  */
 const onAtmosphereChange = (show: boolean) => {
-  // TODO: 实现大气切换
+  cesiumService.setAtmosphere(show)
 }
 
 /**

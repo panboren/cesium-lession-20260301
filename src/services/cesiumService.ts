@@ -245,6 +245,128 @@ export class CesiumService {
       handleError(error)
     }
   }
+
+  /**
+   * 设置地图样式（亮度、对比度、透明度）
+   */
+  setMapStyle(options: {
+    brightness?: number
+    contrast?: number
+    opacity?: number
+  }): void {
+    try {
+      const manager = getCesiumManager()
+      if (!manager) {
+        logger.warn('Cesium Manager not initialized')
+        return
+      }
+
+      const viewer = manager.getViewer()
+      if (!viewer) {
+        logger.warn('Cesium Viewer not initialized')
+        return
+      }
+
+      // 遍历所有影像图层并设置样式
+      const imageryLayers = viewer.imageryLayers
+      for (let i = 0; i < imageryLayers.length; i++) {
+        const layer = imageryLayers.get(i)
+
+        if (options.brightness !== undefined) {
+          layer.brightness = options.brightness
+        }
+
+        if (options.contrast !== undefined) {
+          layer.contrast = options.contrast
+        }
+
+        if (options.opacity !== undefined) {
+          layer.alpha = options.opacity
+        }
+      }
+
+      // 设置全局 globe 透明度（影响整个地球）
+      if (options.opacity !== undefined) {
+        viewer.scene.globe.alpha = options.opacity
+      }
+
+      logger.info('Map style applied', options)
+
+      // 触发渲染以更新显示
+      if (viewer.scene.requestRenderMode) {
+        viewer.scene.requestRender()
+      }
+    } catch (error) {
+      handleError(error)
+    }
+  }
+
+  /**
+   * 设置地形显示
+   */
+  setTerrain(show: boolean): void {
+    try {
+      const manager = getCesiumManager()
+      if (!manager) {
+        logger.warn('Cesium Manager not initialized')
+        return
+      }
+
+      const viewer = manager.getViewer()
+      if (!viewer) {
+        logger.warn('Cesium Viewer not initialized')
+        return
+      }
+
+      if (show) {
+        // 启用地形
+        const terrainProvider = Cesium.CesiumTerrainProvider.fromUrl(
+          'https://assets.ion.cesium.com/1',
+          {
+            requestWaterMask: true,
+            requestVertexNormals: true
+          }
+        )
+        viewer.terrainProvider = terrainProvider
+        logger.info('Terrain enabled')
+      } else {
+        // 禁用地形
+        viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider()
+        logger.info('Terrain disabled')
+      }
+
+      viewer.scene.requestRender()
+    } catch (error) {
+      handleError(error)
+    }
+  }
+
+  /**
+   * 设置大气显示
+   */
+  setAtmosphere(show: boolean): void {
+    try {
+      const manager = getCesiumManager()
+      if (!manager) {
+        logger.warn('Cesium Manager not initialized')
+        return
+      }
+
+      const viewer = manager.getViewer()
+      if (!viewer) {
+        logger.warn('Cesium Viewer not initialized')
+        return
+      }
+
+      viewer.scene.skyAtmosphere.show = show
+      viewer.scene.skyBox.show = show
+      logger.info('Atmosphere', show ? 'enabled' : 'disabled')
+
+      viewer.scene.requestRender()
+    } catch (error) {
+      handleError(error)
+    }
+  }
 }
 
 /**

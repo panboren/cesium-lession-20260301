@@ -373,8 +373,8 @@ export function getCesiumManager(): CesiumManager | null {
  * 销毁 Cesium
  */
 export function destroyCesium(): void {
-  if (cesiumManager) {
-    cesiumManager.destroy()
-    cesiumManager = null
+  if (cesiumManagerInstance) {
+    cesiumManagerInstance.destroy()
+    cesiumManagerInstance = null
   }
 }
