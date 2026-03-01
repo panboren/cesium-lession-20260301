@@ -58,6 +58,16 @@
 
         <el-collapse-item title="特效展示" name="effects">
           <el-form label-width="100px" size="small">
+            <el-form-item label="特效主题">
+              <el-select v-model="effectTheme" @change="onEffectThemeChange">
+                <el-option label="青色科技" value="cyan" />
+                <el-option label="紫蓝科技" value="purple-blue" />
+                <el-option label="霓虹赛博" value="neon-cyber" />
+                <el-option label="黄金未来" value="golden-future" />
+                <el-option label="极光幻彩" value="aurora" />
+                <el-option label="量子深空" value="quantum" />
+              </el-select>
+            </el-form-item>
             <el-form-item label="雷达扫描">
               <el-switch v-model="showRadar" @change="onRadarChange" />
             </el-form-item>
@@ -115,6 +125,7 @@ import {
   LightSpreadEffect,
   PolylineTrailEffect
 } from '@/cesium/effects'
+import { registerCustomMaterials, setEffectTheme } from '@/cesium/materials/customMaterials'
 import type { DrawResult, CameraPosition } from '@/types/cesium'
 import { DrawType } from '@/types/cesium'
 import * as Cesium from 'cesium'
@@ -155,6 +166,7 @@ const showRadar = ref(false)
 const showLightWall = ref(false)
 const showLightSpread = ref(false)
 const showFlyLines = ref(false)
+const effectTheme = ref('cyan')
 const drawResults = ref<DrawResult[]>([])
 const cameraInfo = ref<CameraPosition | null>(null)
 
@@ -169,6 +181,9 @@ onMounted(() => {
  * 地图就绪
  */
 const onMapReady = () => {
+  // 注册自定义材质
+  registerCustomMaterials()
+
   // 初始化特效管理器
   effectsManager.init()
   addSampleMarkers()
@@ -406,6 +421,111 @@ const clearDrawResults = () => {
 }
 
 /**
+ * 特效主题定义
+ */
+const effectThemes = {
+  cyan: {
+    color: Cesium.Color.CYAN,
+    scanColor: Cesium.Color.fromCssColorString('#00ffff'),
+    ringColor: Cesium.Color.fromCssColorString('#00cccc'),
+    beamColor: Cesium.Color.fromCssColorString('#00ffff'),
+    centerColor: Cesium.Color.fromCssColorString('#00ffff'),
+    waveColor: Cesium.Color.fromCssColorString('#00d9ff'),
+    headColor: Cesium.Color.fromCssColorString('#00ffff')
+  },
+  'purple-blue': {
+    color: Cesium.Color.fromCssColorString('#07329f'),
+    scanColor: Cesium.Color.fromCssColorString('#550598'),
+    ringColor: Cesium.Color.fromCssColorString('#550598'),
+    beamColor: Cesium.Color.fromCssColorString('#550598'),
+    centerColor: Cesium.Color.fromCssColorString('#550598'),
+    waveColor: Cesium.Color.fromCssColorString('#550598'),
+    headColor: Cesium.Color.fromCssColorString('#550598')
+  },
+  'neon-cyber': {
+    color: Cesium.Color.fromCssColorString('#ff00ff'),
+    scanColor: Cesium.Color.fromCssColorString('#00ffff'),
+    ringColor: Cesium.Color.fromCssColorString('#ff00aa'),
+    beamColor: Cesium.Color.fromCssColorString('#00ffff'),
+    centerColor: Cesium.Color.fromCssColorString('#ff00ff'),
+    waveColor: Cesium.Color.fromCssColorString('#00ffff'),
+    headColor: Cesium.Color.fromCssColorString('#00ffff')
+  },
+  'golden-future': {
+    color: Cesium.Color.fromCssColorString('#ff6b00'),
+    scanColor: Cesium.Color.fromCssColorString('#ffd700'),
+    ringColor: Cesium.Color.fromCssColorString('#ff8c00'),
+    beamColor: Cesium.Color.fromCssColorString('#ffd700'),
+    centerColor: Cesium.Color.fromCssColorString('#ffd700'),
+    waveColor: Cesium.Color.fromCssColorString('#ffa500'),
+    headColor: Cesium.Color.fromCssColorString('#ffd700')
+  },
+  aurora: {
+    color: Cesium.Color.fromCssColorString('#00ff88'),
+    scanColor: Cesium.Color.fromCssColorString('#00ffff'),
+    ringColor: Cesium.Color.fromCssColorString('#00ffcc'),
+    beamColor: Cesium.Color.fromCssColorString('#88ff00'),
+    centerColor: Cesium.Color.fromCssColorString('#00ffff'),
+    waveColor: Cesium.Color.fromCssColorString('#00ff88'),
+    headColor: Cesium.Color.fromCssColorString('#00ffff')
+  },
+  quantum: {
+    color: Cesium.Color.fromCssColorString('#8a2be2'),
+    scanColor: Cesium.Color.fromCssColorString('#00bfff'),
+    ringColor: Cesium.Color.fromCssColorString('#9932cc'),
+    beamColor: Cesium.Color.fromCssColorString('#00bfff'),
+    centerColor: Cesium.Color.fromCssColorString('#00bfff'),
+    waveColor: Cesium.Color.fromCssColorString('#9370db'),
+    headColor: Cesium.Color.fromCssColorString('#00bfff')
+  }
+}
+
+/**
+ * 获取当前主题颜色
+ */
+const getCurrentThemeColors = () => {
+  return effectThemes[effectTheme.value as keyof typeof effectThemes] || effectThemes.cyan
+}
+
+/**
+ * 特效主题切换
+ */
+const onEffectThemeChange = () => {
+  const themeMap: Record<string, string> = {
+    cyan: '青色科技',
+    'purple-blue': '紫蓝科技',
+    'neon-cyber': '霓虹赛博',
+    'golden-future': '黄金未来',
+    aurora: '极光幻彩',
+    quantum: '量子深空'
+  }
+
+  const themeName = themeMap[effectTheme.value] || effectTheme.value
+  ElMessage.success(`已切换到${themeName}主题`)
+
+  // 设置材质主题
+  setEffectTheme(effectTheme.value as any)
+
+  // 如果特效正在显示，重新创建以应用新主题
+  if (showRadar.value) {
+    onRadarChange(false)
+    setTimeout(() => onRadarChange(true), 100)
+  }
+  if (showLightWall.value) {
+    onLightWallChange(false)
+    setTimeout(() => onLightWallChange(true), 100)
+  }
+  if (showLightSpread.value) {
+    onLightSpreadChange(false)
+    setTimeout(() => onLightSpreadChange(true), 100)
+  }
+  if (showFlyLines.value) {
+    onFlyLinesChange(false)
+    setTimeout(() => onFlyLinesChange(true), 100)
+  }
+}
+
+/**
  * 雷达特效切换
  */
 const onRadarChange = (show: boolean) => {
@@ -416,12 +536,16 @@ const onRadarChange = (show: boolean) => {
     const viewer = manager.getViewer()
     if (!viewer) return
 
-    // 在北京位置创建圆形雷达 - 使用新的优化参数
+    const theme = getCurrentThemeColors()
+
+    // 在北京位置创建圆形雷达 - 使用主题颜色
     const radarEffect = new RadarEffect(viewer)
     radarEffect.create(116.39, 39.91, 5000, {
-      color: Cesium.Color.CYAN,
+      color: theme.color,
       scanSpeed: 0.3,
-      height: 100
+      height: 100,
+      scanColor: theme.scanColor,
+      ringColor: theme.ringColor
     })
     effectsManager.addEffect('radar', radarEffect)
     ElMessage.success('雷达特效已开启')
@@ -453,16 +577,19 @@ const onLightWallChange = (show: boolean) => {
     const viewer = manager.getViewer()
     if (!viewer) return
 
-    // 在北京创建光墙 - 使用新的优化参数
+    const theme = getCurrentThemeColors()
+
+    // 在北京创建光墙 - 使用主题颜色
     console.log('[Map3D] Creating light wall effect...')
     const lightWallEffect = new LightWallEffect(viewer)
     lightWallEffect.create(
       [116.35, 39.88, 116.43, 39.88, 116.43, 39.93, 116.35, 39.93],
       800,
       {
-        color: Cesium.Color.CYAN,
+        color: theme.color,
         direction: 1.0,
-        minHeight: 0
+        minHeight: 0,
+        beamColor: theme.beamColor
       }
     )
     effectsManager.addEffect('lightWall', lightWallEffect)
@@ -498,13 +625,16 @@ const onLightSpreadChange = (show: boolean) => {
     const viewer = manager.getViewer()
     if (!viewer) return
 
-    // 在北京创建流光扩散 - 使用新的优化参数
+    const theme = getCurrentThemeColors()
+
+    // 在北京创建流光扩散 - 使用主题颜色
     const lightSpreadEffect = new LightSpreadEffect(viewer)
     lightSpreadEffect.create(116.35, 39.88, 116.43, 39.93, {
-      color: new Cesium.Color(0.3, 0.8, 1.0, 1.0),
+      color: theme.color,
       waveCount: 4,
       height: 100,
-      animate: true
+      centerColor: theme.centerColor,
+      waveColor: theme.waveColor
     })
     effectsManager.addEffect('lightSpread', lightSpreadEffect)
     ElMessage.success('流光扩散特效已开启')
@@ -525,7 +655,9 @@ const onFlyLinesChange = (show: boolean) => {
     const viewer = manager.getViewer()
     if (!viewer) return
 
-    // 创建多条飞线 - 使用新的优化参数
+    const theme = getCurrentThemeColors()
+
+    // 创建多条飞线 - 使用主题颜色
     const lines: Array<{
       startLon: number
       startLat: number
@@ -553,7 +685,8 @@ const onFlyLinesChange = (show: boolean) => {
         endLat,
         endHeight: 2000 + Math.random() * 2000,
         width: 4,
-        color: Cesium.Color.CYAN,
+        color: theme.color,
+        headColor: theme.headColor,
         speed: 1.0 + Math.random() * 0.5
       })
     }

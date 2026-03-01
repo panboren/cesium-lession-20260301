@@ -1,10 +1,90 @@
 /**
- * 自定义材质注册 - Cesium 1.138+ 紫蓝科技配色版本
+ * 自定义材质注册 - Cesium 1.138+ 多主题配色版本
  *
- * 使用统一的紫色与深蓝色系配色 (#550598, #07329f)
+ * 支持多种科技感、绚丽、未来感配色主题
  */
 
 import * as Cesium from 'cesium'
+
+/**
+ * 主题配色定义
+ */
+export const effectThemes = {
+  cyan: {
+    color: new Cesium.Color(0.0, 1.0, 1.0, 1.0),
+    beamColor: new Cesium.Color(0.0, 1.0, 1.0, 1.0),
+    scanColor: new Cesium.Color(0.0, 1.0, 1.0, 1.0),
+    ringColor: new Cesium.Color(0.0, 0.8, 1.0, 1.0),
+    centerColor: new Cesium.Color(0.0, 1.0, 1.0, 1.0),
+    waveColor: new Cesium.Color(0.0, 0.85, 1.0, 1.0),
+    headColor: new Cesium.Color(0.0, 1.0, 1.0, 1.0)
+  },
+  'purple-blue': {
+    color: new Cesium.Color.fromCssColorString('#07329f'),
+    beamColor: new Cesium.Color.fromCssColorString('#550598'),
+    scanColor: new Cesium.Color.fromCssColorString('#550598'),
+    ringColor: new Cesium.Color.fromCssColorString('#550598'),
+    centerColor: new Cesium.Color.fromCssColorString('#550598'),
+    waveColor: new Cesium.Color.fromCssColorString('#550598'),
+    headColor: new Cesium.Color.fromCssColorString('#550598')
+  },
+  'neon-cyber': {
+    color: new Cesium.Color.fromCssColorString('#ff00ff'),
+    beamColor: new Cesium.Color.fromCssColorString('#00ffff'),
+    scanColor: new Cesium.Color.fromCssColorString('#00ffff'),
+    ringColor: new Cesium.Color.fromCssColorString('#ff00aa'),
+    centerColor: new Cesium.Color.fromCssColorString('#ff00ff'),
+    waveColor: new Cesium.Color.fromCssColorString('#00ffff'),
+    headColor: new Cesium.Color.fromCssColorString('#00ffff')
+  },
+  'golden-future': {
+    color: new Cesium.Color.fromCssColorString('#ff6b00'),
+    beamColor: new Cesium.Color.fromCssColorString('#ffd700'),
+    scanColor: new Cesium.Color.fromCssColorString('#ffd700'),
+    ringColor: new Cesium.Color.fromCssColorString('#ff8c00'),
+    centerColor: new Cesium.Color.fromCssColorString('#ffd700'),
+    waveColor: new Cesium.Color.fromCssColorString('#ffa500'),
+    headColor: new Cesium.Color.fromCssColorString('#ffd700')
+  },
+  aurora: {
+    color: new Cesium.Color.fromCssColorString('#00ff88'),
+    beamColor: new Cesium.Color.fromCssColorString('#88ff00'),
+    scanColor: new Cesium.Color.fromCssColorString('#00ffff'),
+    ringColor: new Cesium.Color.fromCssColorString('#00ffcc'),
+    centerColor: new Cesium.Color.fromCssColorString('#00ffff'),
+    waveColor: new Cesium.Color.fromCssColorString('#00ff88'),
+    headColor: new Cesium.Color.fromCssColorString('#00ffff')
+  },
+  quantum: {
+    color: new Cesium.Color.fromCssColorString('#8a2be2'),
+    beamColor: new Cesium.Color.fromCssColorString('#00bfff'),
+    scanColor: new Cesium.Color.fromCssColorString('#00bfff'),
+    ringColor: new Cesium.Color.fromCssColorString('#9932cc'),
+    centerColor: new Cesium.Color.fromCssColorString('#00bfff'),
+    waveColor: new Cesium.Color.fromCssColorString('#9370db'),
+    headColor: new Cesium.Color.fromCssColorString('#00bfff')
+  }
+}
+
+/**
+ * 当前主题
+ */
+let currentTheme: keyof typeof effectThemes = 'cyan'
+
+/**
+ * 设置当前主题
+ */
+export function setEffectTheme(themeName: keyof typeof effectThemes) {
+  currentTheme = themeName
+  console.log('[CustomMaterials] Theme set to:', themeName)
+}
+
+/**
+ * 获取当前主题颜色
+ */
+export function getCurrentThemeColors() {
+  return effectThemes[currentTheme]
+}
 
 /**
  * 注册所有自定义材质
@@ -19,15 +99,17 @@ export function registerCustomMaterials() {
     return
   }
 
-  // 1. 注册光墙材质 - 紫蓝科技配色
+  const theme = getCurrentThemeColors()
+
+  // 1. 注册光墙材质
   cache.addMaterial('LightWall', {
     fabric: {
       type: 'LightWall',
       uniforms: {
         time: 0.0,
-        color: new Cesium.Color.fromCssColorString('#07329f'),
+        color: theme.color,
         direction: 1.0,
-        beamColor: new Cesium.Color.fromCssColorString('#550598')
+        beamColor: theme.beamColor
       },
       source: `
         uniform float time;
@@ -83,16 +165,16 @@ export function registerCustomMaterials() {
   })
   console.log('[CustomMaterials] LightWall registered')
 
-  // 2. 注册雷达材质 - 紫蓝科技配色
+  // 2. 注册雷达材质
   cache.addMaterial('Radar', {
     fabric: {
       type: 'Radar',
       uniforms: {
         time: 0.0,
-        color: new Cesium.Color.fromCssColorString('#07329f'),
+        color: theme.color,
         scanSpeed: 0.25,
-        ringColor: new Cesium.Color.fromCssColorString('#550598'),
-        scanColor: new Cesium.Color.fromCssColorString('#550598')
+        ringColor: theme.ringColor,
+        scanColor: theme.scanColor
       },
       source: `
         uniform float time;
@@ -172,16 +254,16 @@ export function registerCustomMaterials() {
   })
   console.log('[CustomMaterials] Radar registered')
 
-  // 3. 注册流光扩散材质 - 紫蓝科技配色
+  // 3. 注册流光扩散材质
   cache.addMaterial('LightSpread', {
     fabric: {
       type: 'LightSpread',
       uniforms: {
         time: 0.0,
-        color: new Cesium.Color.fromCssColorString('#07329f'),
+        color: theme.color,
         waveCount: 5,
-        centerColor: new Cesium.Color.fromCssColorString('#550598'),
-        waveColor: new Cesium.Color.fromCssColorString('#550598')
+        centerColor: theme.centerColor,
+        waveColor: theme.waveColor
       },
       source: `
         uniform float time;
@@ -250,16 +332,16 @@ export function registerCustomMaterials() {
   })
   console.log('[CustomMaterials] LightSpread registered')
 
-  // 4. 注册飞线材质 - 紫蓝科技配色
+  // 4. 注册飞线材质
   cache.addMaterial('FlyLine', {
     fabric: {
       type: 'FlyLine',
       uniforms: {
         time: 0.0,
-        color: new Cesium.Color.fromCssColorString('#07329f'),
+        color: theme.color,
         speed: 1.0,
         percent: 0.4,
-        headColor: new Cesium.Color.fromCssColorString('#550598')
+        headColor: theme.headColor
       },
       source: `
         uniform float time;
