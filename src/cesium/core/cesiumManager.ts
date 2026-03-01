@@ -127,8 +127,11 @@ export class CesiumManager {
     }
 
     // 配置 Cesium Ion 访问令牌（可选）
-    if (import.meta.env.VITE_CESIUM_ION_TOKEN) {
-      Cesium.Ion.defaultAccessToken = import.meta.env.VITE_CESIUM_ION_TOKEN as string
+    const token = import.meta.env.VITE_CESIUM_ION_TOKEN
+    console.log('[CesiumManager] Cesium Ion token from env:', token ? `${token.substring(0, 20)}...` : 'undefined')
+    if (token) {
+      Cesium.Ion.defaultAccessToken = token
+      console.log('[CesiumManager] Cesium Ion defaultAccessToken set successfully')
     }
 
     // 创建 Viewer

@@ -237,9 +237,18 @@ export class CesiumService {
   setSceneMode(mode: Cesium.SceneMode): void {
     try {
       const manager = getCesiumManager()
-      if (!manager) return
+      if (!manager) {
+        logger.warn('Cesium Manager not initialized')
+        return
+      }
 
-      manager.setSceneMode(mode)
+      const viewer = manager.getViewer()
+      if (!viewer) {
+        logger.warn('Cesium Viewer not initialized')
+        return
+      }
+
+      viewer.scene.mode = mode
       logger.info('Scene mode changed', mode)
     } catch (error) {
       handleError(error)
@@ -304,7 +313,7 @@ export class CesiumService {
   /**
    * 设置地形显示
    */
-  setTerrain(show: boolean): void {
+  async setTerrain(show: boolean): Promise<void> {
     try {
       const manager = getCesiumManager()
       if (!manager) {
@@ -318,26 +327,62 @@ export class CesiumService {
         return
       }
 
+      console.log('[CesiumService] Setting terrain to:', show)
+      console.log('[CesiumService] Current Ion token exists:', !!Cesium.Ion.defaultAccessToken)
+
       if (show) {
-        // 启用地形
-        const terrainProvider = Cesium.CesiumTerrainProvider.fromUrl(
-          'https://assets.ion.cesium.com/1',
-          {
+        // 使用 Cesium 推荐的方式：viewer.scene.setTerrain()
+        // 参考：https://sandcastle.cesium.com/
+        try {
+          console.log('[CesiumService] Loading Cesium World Terrain...')
+
+          // 使用 Cesium.Terrain.fromWorldTerrain() 创建地形
+          // 这个方法会自动使用配置的 Ion token
+          const terrain = await Cesium.Terrain.fromWorldTerrain({
             requestWaterMask: true,
             requestVertexNormals: true
-          }
-        )
-        viewer.terrainProvider = terrainProvider
-        logger.info('Terrain enabled')
+          })
+
+          // 使用 setTerrain 方法设置地形（Cesium 推荐的方式）
+          await viewer.scene.setTerrain(terrain)
+
+          console.log('[CesiumService] Cesium World Terrain loaded successfully')
+          logger.info('Cesium World Terrain enabled')
+
+          // 启用地形光照效果，使地形更明显
+          viewer.scene.globe.enableLighting = true
+        } catch (error) {
+          console.error('[CesiumService] Failed to load terrain:', error)
+          logger.warn('Failed to load terrain, using simple terrain instead', error)
+
+          // 显示错误信息
+          handleError(error, {
+            showMessage: true,
+            message: '地形加载失败。请检查 Cesium Ion token 配置。'
+          })
+
+          // 回退到无地形
+          await viewer.scene.setTerrain()
+          viewer.scene.globe.enableLighting = false
+          logger.info('No terrain (fallback)')
+        }
       } else {
-        // 禁用地形
-        viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider()
+        // 禁用地形 - 使用 EllipsoidTerrainProvider 替换为平面地球
+        console.log('[CesiumService] Removing terrain')
+        const ellipsoidProvider = new Cesium.EllipsoidTerrainProvider()
+        await viewer.scene.setTerrain(new Cesium.Terrain(ellipsoidProvider))
+        viewer.scene.globe.enableLighting = false
         logger.info('Terrain disabled')
       }
 
       viewer.scene.requestRender()
     } catch (error) {
-      handleError(error)
+      console.error('[CesiumService] Error setting terrain:', error)
+      logger.error('Error setting terrain:', error)
+      handleError(error, {
+        showMessage: true,
+        message: '地形设置失败'
+      })
     }
   }
 

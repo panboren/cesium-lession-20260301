@@ -209,8 +209,9 @@ const onSceneModeChange = (mode: string) => {
 /**
  * 地形显示变化
  */
-const onTerrainChange = (show: boolean) => {
-  cesiumService.setTerrain(show)
+const onTerrainChange = async (show: boolean) => {
+  await cesiumService.setTerrain(show)
+  ElMessage.success(show ? '地形已开启' : '地形已关闭')
 }
 
 /**
@@ -218,6 +219,7 @@ const onTerrainChange = (show: boolean) => {
  */
 const onAtmosphereChange = (show: boolean) => {
   cesiumService.setAtmosphere(show)
+  ElMessage.success(show ? '大气已开启' : '大气已关闭')
 }
 
 /**
