@@ -1,7 +1,7 @@
 /**
- * 自定义材质注册 - Cesium 1.138+ 科技感配色版本
+ * 自定义材质注册 - Cesium 1.138+ 紫蓝科技配色版本
  *
- * 使用统一的科技感青色系配色
+ * 使用统一的紫色与深蓝色系配色 (#550598, #07329f)
  */
 
 import * as Cesium from 'cesium'
@@ -19,15 +19,15 @@ export function registerCustomMaterials() {
     return
   }
 
-  // 1. 注册光墙材质 - 科技感配色
+  // 1. 注册光墙材质 - 紫蓝科技配色
   cache.addMaterial('LightWall', {
     fabric: {
       type: 'LightWall',
       uniforms: {
         time: 0.0,
-        color: new Cesium.Color(0.0, 0.9, 1.0, 1.0),
+        color: new Cesium.Color.fromCssColorString('#07329f'),
         direction: 1.0,
-        beamColor: new Cesium.Color(0.0, 1.0, 1.0, 1.0)
+        beamColor: new Cesium.Color.fromCssColorString('#550598')
       },
       source: `
         uniform float time;
@@ -83,16 +83,16 @@ export function registerCustomMaterials() {
   })
   console.log('[CustomMaterials] LightWall registered')
 
-  // 2. 注册雷达材质 - 科技感配色
+  // 2. 注册雷达材质 - 紫蓝科技配色
   cache.addMaterial('Radar', {
     fabric: {
       type: 'Radar',
       uniforms: {
         time: 0.0,
-        color: new Cesium.Color(0.0, 0.95, 1.0, 1.0),
+        color: new Cesium.Color.fromCssColorString('#07329f'),
         scanSpeed: 0.25,
-        ringColor: new Cesium.Color(0.0, 0.8, 1.0, 1.0),
-        scanColor: new Cesium.Color(0.0, 1.0, 1.0, 1.0)
+        ringColor: new Cesium.Color.fromCssColorString('#550598'),
+        scanColor: new Cesium.Color.fromCssColorString('#550598')
       },
       source: `
         uniform float time;
@@ -172,16 +172,16 @@ export function registerCustomMaterials() {
   })
   console.log('[CustomMaterials] Radar registered')
 
-  // 3. 注册流光扩散材质 - 科技感配色
+  // 3. 注册流光扩散材质 - 紫蓝科技配色
   cache.addMaterial('LightSpread', {
     fabric: {
       type: 'LightSpread',
       uniforms: {
         time: 0.0,
-        color: new Cesium.Color(0.0, 0.8, 1.0, 1.0),
+        color: new Cesium.Color.fromCssColorString('#07329f'),
         waveCount: 5,
-        centerColor: new Cesium.Color(0.0, 1.0, 1.0, 1.0),
-        waveColor: new Cesium.Color(0.0, 0.85, 1.0, 1.0)
+        centerColor: new Cesium.Color.fromCssColorString('#550598'),
+        waveColor: new Cesium.Color.fromCssColorString('#550598')
       },
       source: `
         uniform float time;
@@ -250,16 +250,16 @@ export function registerCustomMaterials() {
   })
   console.log('[CustomMaterials] LightSpread registered')
 
-  // 4. 注册飞线材质 - 科技感配色
+  // 4. 注册飞线材质 - 紫蓝科技配色
   cache.addMaterial('FlyLine', {
     fabric: {
       type: 'FlyLine',
       uniforms: {
         time: 0.0,
-        color: new Cesium.Color(0.0, 0.95, 1.0, 1.0),
+        color: new Cesium.Color.fromCssColorString('#07329f'),
         speed: 1.0,
         percent: 0.4,
-        headColor: new Cesium.Color(0.0, 1.0, 1.0, 1.0)
+        headColor: new Cesium.Color.fromCssColorString('#550598')
       },
       source: `
         uniform float time;

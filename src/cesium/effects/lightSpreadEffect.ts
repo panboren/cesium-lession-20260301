@@ -85,16 +85,16 @@ export class LightSpreadEffect {
     } = {}
   ): Cesium.Entity {
     const {
-      color = Cesium.Color.fromCssColorString('#00ccff'),
+      color = Cesium.Color.fromCssColorString('#07329f'),
       waveCount = 5,
       height = 100
     } = options
 
-    // 中心颜色 - 高亮青色
-    const centerColor = options.centerColor || Cesium.Color.fromCssColorString('#00ffff')
+    // 中心颜色 - 紫色
+    const centerColor = options.centerColor || Cesium.Color.fromCssColorString('#550598')
 
-    // 波纹颜色
-    const waveColor = options.waveColor || Cesium.Color.fromCssColorString('#00d9ff')
+    // 波纹颜色 - 紫色
+    const waveColor = options.waveColor || Cesium.Color.fromCssColorString('#550598')
 
     // 创建材质属性实例
     this.materialProperty = new LightSpreadMaterialProperty(color, waveCount, centerColor, waveColor)

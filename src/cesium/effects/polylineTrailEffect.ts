@@ -89,14 +89,14 @@ export class PolylineTrailEffect {
   ): Cesium.Entity {
     const {
       width = 4,
-      color = Cesium.Color.fromCssColorString('#00f2ff'),
+      color = Cesium.Color.fromCssColorString('#07329f'),
       speed = 1.0,
       percent = 0.4,
       useBuiltIn = false
     } = options
 
-    // 光头颜色 - 高亮青色
-    const headColor = options.headColor || Cesium.Color.fromCssColorString('#00ffff')
+    // 光头颜色 - 紫色
+    const headColor = options.headColor || Cesium.Color.fromCssColorString('#550598')
 
     let material: any
 
@@ -152,7 +152,7 @@ export class PolylineTrailEffect {
         line.endHeight,
         {
           width: line.width || 4,
-          color: line.color || Cesium.Color.CYAN,
+          color: line.color || Cesium.Color.fromCssColorString('#07329f'),
           speed: line.speed || 1.0
         }
       )

@@ -79,10 +79,10 @@ export class LightWallEffect {
       beamColor?: Cesium.Color
     } = {}
   ): Cesium.Entity {
-    const { color = Cesium.Color.fromCssColorString('#00e6ff'), direction = 1.0, minHeight = 0 } = options
+    const { color = Cesium.Color.fromCssColorString('#07329f'), direction = 1.0, minHeight = 0 } = options
 
-    // 光束颜色 - 高亮青色
-    const beamColor = options.beamColor || Cesium.Color.fromCssColorString('#00ffff')
+    // 光束颜色 - 紫色
+    const beamColor = options.beamColor || Cesium.Color.fromCssColorString('#550598')
 
     // 将 [lon, lat, lon, lat, ...] 转换为 [lon, lat, minHeight, lon, lat, height, ...]
     const wallPositions: number[] = []

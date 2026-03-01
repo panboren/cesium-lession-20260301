@@ -91,14 +91,14 @@ export class RadarEffect {
       scanColor?: Cesium.Color
     } = {}
   ): Cesium.Entity {
-    // 科技感配色 - 青色系
-    const { color = Cesium.Color.CYAN.withAlpha(0.3), scanSpeed = 0.25, height = 100 } = options
+    // 紫蓝科技配色
+    const { color = Cesium.Color.fromCssColorString('#07329f').withAlpha(0.3), scanSpeed = 0.25, height = 100 } = options
 
-    // 扫描线颜色 - 高亮青色
-    const scanColor = options.scanColor || Cesium.Color.fromCssColorString('#00ffff')
+    // 扫描线颜色 - 紫色
+    const scanColor = options.scanColor || Cesium.Color.fromCssColorString('#550598')
 
-    // 圆环颜色 - 稍暗的青色
-    const ringColor = options.ringColor || Cesium.Color.fromCssColorString('#00cccc')
+    // 圆环颜色 - 紫色
+    const ringColor = options.ringColor || Cesium.Color.fromCssColorString('#550598')
 
     // 创建材质属性实例
     this.materialProperty = new RadarMaterialProperty(color, scanSpeed, ringColor, scanColor)
