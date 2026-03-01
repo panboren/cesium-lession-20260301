@@ -84,8 +84,52 @@
             <el-form-item label="火焰/烟雾">
               <el-switch v-model="showFireSmoke" @change="onFireSmokeChange" />
             </el-form-item>
+            <el-form-item label="雨雪天气">
+              <el-switch v-model="showWeather" @change="onWeatherChange" />
+            </el-form-item>
           </el-form>
         </el-collapse-item>
+
+        <!-- 天气控制面板 -->
+        <div v-if="showWeather" class="weather-panel">
+          <div class="panel-title">天气控制</div>
+          <el-form label-width="80px" size="small">
+            <el-form-item label="天气类型">
+              <el-radio-group v-model="weatherType" @change="onWeatherTypeChange">
+                <el-radio value="rain">雨</el-radio>
+                <el-radio value="snow">雪</el-radio>
+                <el-radio value="both">雨+雪</el-radio>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item label="降水量">
+              <el-slider
+                v-model="rainIntensity"
+                :min="0"
+                :max="1"
+                :step="0.1"
+                @change="onIntensityChange"
+              />
+            </el-form-item>
+            <el-form-item label="风向">
+              <el-slider
+                v-model="windDirection"
+                :min="0"
+                :max="360"
+                :step="10"
+                @change="onWindChange"
+              />
+            </el-form-item>
+            <el-form-item label="风速">
+              <el-slider
+                v-model="windSpeed"
+                :min="0"
+                :max="20"
+                :step="1"
+                @change="onWindChange"
+              />
+            </el-form-item>
+          </el-form>
+        </div>
       </el-collapse>
     </div>
 
@@ -128,7 +172,8 @@ import {
   LightWallEffect,
   LightSpreadEffect,
   PolylineTrailEffect,
-  FireSmokeEffect
+  FireSmokeEffect,
+  WeatherEffect
 } from '@/cesium/effects'
 import { registerCustomMaterials, setEffectTheme } from '@/cesium/materials/customMaterials'
 import type { DrawResult, CameraPosition } from '@/types/cesium'
@@ -172,6 +217,11 @@ const showLightWall = ref(false)
 const showLightSpread = ref(false)
 const showFlyLines = ref(false)
 const showFireSmoke = ref(false)
+const showWeather = ref(false)
+const weatherType = ref('rain')
+const rainIntensity = ref(1)
+const windDirection = ref(360)
+const windSpeed = ref(20)
 const effectTheme = ref('cyan')
 const drawResults = ref<DrawResult[]>([])
 const cameraInfo = ref<CameraPosition | null>(null)
@@ -437,7 +487,11 @@ const effectThemes = {
     beamColor: Cesium.Color.fromCssColorString('#00ffff'),
     centerColor: Cesium.Color.fromCssColorString('#00ffff'),
     waveColor: Cesium.Color.fromCssColorString('#00d9ff'),
-    headColor: Cesium.Color.fromCssColorString('#00ffff')
+    headColor: Cesium.Color.fromCssColorString('#00ffff'),
+    fireColor: Cesium.Color.fromCssColorString('#00ffff'),
+    smokeColor: Cesium.Color.fromCssColorString('#808080'),
+    rainColor: Cesium.Color.fromCssColorString('#aaddff'),
+    snowColor: Cesium.Color.fromCssColorString('#e0f0ff')
   },
   'purple-blue': {
     color: Cesium.Color.fromCssColorString('#07329f'),
@@ -446,7 +500,11 @@ const effectThemes = {
     beamColor: Cesium.Color.fromCssColorString('#550598'),
     centerColor: Cesium.Color.fromCssColorString('#550598'),
     waveColor: Cesium.Color.fromCssColorString('#550598'),
-    headColor: Cesium.Color.fromCssColorString('#550598')
+    headColor: Cesium.Color.fromCssColorString('#550598'),
+    fireColor: Cesium.Color.fromCssColorString('#550598'),
+    smokeColor: Cesium.Color.fromCssColorString('#808080'),
+    rainColor: Cesium.Color.fromCssColorString('#7788ee'),
+    snowColor: Cesium.Color.fromCssColorString('#ddeeff')
   },
   'neon-cyber': {
     color: Cesium.Color.fromCssColorString('#ff00ff'),
@@ -455,7 +513,11 @@ const effectThemes = {
     beamColor: Cesium.Color.fromCssColorString('#00ffff'),
     centerColor: Cesium.Color.fromCssColorString('#ff00ff'),
     waveColor: Cesium.Color.fromCssColorString('#00ffff'),
-    headColor: Cesium.Color.fromCssColorString('#00ffff')
+    headColor: Cesium.Color.fromCssColorString('#00ffff'),
+    fireColor: Cesium.Color.fromCssColorString('#ff00ff'),
+    smokeColor: Cesium.Color.fromCssColorString('#808080'),
+    rainColor: Cesium.Color.fromCssColorString('#ff66ff'),
+    snowColor: Cesium.Color.fromCssColorString('#ffe0ff')
   },
   'golden-future': {
     color: Cesium.Color.fromCssColorString('#ff6b00'),
@@ -464,7 +526,11 @@ const effectThemes = {
     beamColor: Cesium.Color.fromCssColorString('#ffd700'),
     centerColor: Cesium.Color.fromCssColorString('#ffd700'),
     waveColor: Cesium.Color.fromCssColorString('#ffa500'),
-    headColor: Cesium.Color.fromCssColorString('#ffd700')
+    headColor: Cesium.Color.fromCssColorString('#ffd700'),
+    fireColor: Cesium.Color.fromCssColorString('#ffd700'),
+    smokeColor: Cesium.Color.fromCssColorString('#808080'),
+    rainColor: Cesium.Color.fromCssColorString('#ffcc88'),
+    snowColor: Cesium.Color.fromCssColorString('#ffeecc')
   },
   aurora: {
     color: Cesium.Color.fromCssColorString('#00ff88'),
@@ -473,7 +539,11 @@ const effectThemes = {
     beamColor: Cesium.Color.fromCssColorString('#88ff00'),
     centerColor: Cesium.Color.fromCssColorString('#00ffff'),
     waveColor: Cesium.Color.fromCssColorString('#00ff88'),
-    headColor: Cesium.Color.fromCssColorString('#00ffff')
+    headColor: Cesium.Color.fromCssColorString('#00ffff'),
+    fireColor: Cesium.Color.fromCssColorString('#00ff88'),
+    smokeColor: Cesium.Color.fromCssColorString('#808080'),
+    rainColor: Cesium.Color.fromCssColorString('#88ffcc'),
+    snowColor: Cesium.Color.fromCssColorString('#ccffee')
   },
   quantum: {
     color: Cesium.Color.fromCssColorString('#8a2be2'),
@@ -482,7 +552,11 @@ const effectThemes = {
     beamColor: Cesium.Color.fromCssColorString('#00bfff'),
     centerColor: Cesium.Color.fromCssColorString('#00bfff'),
     waveColor: Cesium.Color.fromCssColorString('#9370db'),
-    headColor: Cesium.Color.fromCssColorString('#00bfff')
+    headColor: Cesium.Color.fromCssColorString('#00bfff'),
+    fireColor: Cesium.Color.fromCssColorString('#8a2be2'),
+    smokeColor: Cesium.Color.fromCssColorString('#808080'),
+    rainColor: Cesium.Color.fromCssColorString('#9966dd'),
+    snowColor: Cesium.Color.fromCssColorString('#ddccff')
   },
   fire: {
     fireColor: Cesium.Color.fromCssColorString('#ff4500'),
@@ -493,73 +567,9 @@ const effectThemes = {
     beamColor: Cesium.Color.fromCssColorString('#ff4500'),
     centerColor: Cesium.Color.fromCssColorString('#ffcc00'),
     waveColor: Cesium.Color.fromCssColorString('#ff4500'),
-    headColor: Cesium.Color.fromCssColorString('#ffcc00')
-  },
-  cyan: {
-    fireColor: Cesium.Color.fromCssColorString('#00ffff'),
-    smokeColor: Cesium.Color.fromCssColorString('#808080'),
-    color: Cesium.Color.CYAN,
-    scanColor: Cesium.Color.fromCssColorString('#00ffff'),
-    ringColor: Cesium.Color.fromCssColorString('#00cccc'),
-    beamColor: Cesium.Color.fromCssColorString('#00ffff'),
-    centerColor: Cesium.Color.fromCssColorString('#00ffff'),
-    waveColor: Cesium.Color.fromCssColorString('#00d9ff'),
-    headColor: Cesium.Color.fromCssColorString('#00ffff')
-  },
-  'purple-blue': {
-    fireColor: Cesium.Color.fromCssColorString('#550598'),
-    smokeColor: Cesium.Color.fromCssColorString('#808080'),
-    color: Cesium.Color.fromCssColorString('#07329f'),
-    scanColor: Cesium.Color.fromCssColorString('#550598'),
-    ringColor: Cesium.Color.fromCssColorString('#550598'),
-    beamColor: Cesium.Color.fromCssColorString('#550598'),
-    centerColor: Cesium.Color.fromCssColorString('#550598'),
-    waveColor: Cesium.Color.fromCssColorString('#550598'),
-    headColor: Cesium.Color.fromCssColorString('#550598')
-  },
-  'neon-cyber': {
-    fireColor: Cesium.Color.fromCssColorString('#ff00ff'),
-    smokeColor: Cesium.Color.fromCssColorString('#808080'),
-    color: Cesium.Color.fromCssColorString('#ff00ff'),
-    scanColor: Cesium.Color.fromCssColorString('#00ffff'),
-    ringColor: Cesium.Color.fromCssColorString('#ff00aa'),
-    beamColor: Cesium.Color.fromCssColorString('#00ffff'),
-    centerColor: Cesium.Color.fromCssColorString('#ff00ff'),
-    waveColor: Cesium.Color.fromCssColorString('#00ffff'),
-    headColor: Cesium.Color.fromCssColorString('#00ffff')
-  },
-  'golden-future': {
-    fireColor: Cesium.Color.fromCssColorString('#ffd700'),
-    smokeColor: Cesium.Color.fromCssColorString('#808080'),
-    color: Cesium.Color.fromCssColorString('#ff6b00'),
-    scanColor: Cesium.Color.fromCssColorString('#ffd700'),
-    ringColor: Cesium.Color.fromCssColorString('#ff8c00'),
-    beamColor: Cesium.Color.fromCssColorString('#ffd700'),
-    centerColor: Cesium.Color.fromCssColorString('#ffd700'),
-    waveColor: Cesium.Color.fromCssColorString('#ffa500'),
-    headColor: Cesium.Color.fromCssColorString('#ffd700')
-  },
-  aurora: {
-    fireColor: Cesium.Color.fromCssColorString('#00ff88'),
-    smokeColor: Cesium.Color.fromCssColorString('#808080'),
-    color: Cesium.Color.fromCssColorString('#00ff88'),
-    scanColor: Cesium.Color.fromCssColorString('#00ffff'),
-    ringColor: Cesium.Color.fromCssColorString('#00ffcc'),
-    beamColor: Cesium.Color.fromCssColorString('#88ff00'),
-    centerColor: Cesium.Color.fromCssColorString('#00ffff'),
-    waveColor: Cesium.Color.fromCssColorString('#00ff88'),
-    headColor: Cesium.Color.fromCssColorString('#00ffff')
-  },
-  quantum: {
-    fireColor: Cesium.Color.fromCssColorString('#8a2be2'),
-    smokeColor: Cesium.Color.fromCssColorString('#808080'),
-    color: Cesium.Color.fromCssColorString('#8a2be2'),
-    scanColor: Cesium.Color.fromCssColorString('#00bfff'),
-    ringColor: Cesium.Color.fromCssColorString('#9932cc'),
-    beamColor: Cesium.Color.fromCssColorString('#00bfff'),
-    centerColor: Cesium.Color.fromCssColorString('#00bfff'),
-    waveColor: Cesium.Color.fromCssColorString('#9370db'),
-    headColor: Cesium.Color.fromCssColorString('#00bfff')
+    headColor: Cesium.Color.fromCssColorString('#ffcc00'),
+    rainColor: Cesium.Color.fromCssColorString('#ffaa66'),
+    snowColor: Cesium.Color.fromCssColorString('#ffddcc')
   }
 }
 
@@ -610,6 +620,10 @@ const onEffectThemeChange = () => {
   if (showFireSmoke.value) {
     onFireSmokeChange(false)
     setTimeout(() => onFireSmokeChange(true), 100)
+  }
+  if (showWeather.value) {
+    onWeatherChange(false)
+    setTimeout(() => onWeatherChange(true), 100)
   }
 }
 
@@ -850,6 +864,125 @@ const onFireSmokeChange = (show: boolean) => {
     ElMessage.success('火焰/烟雾特效已关闭')
   }
 }
+
+/**
+ * 雨雪天气特效切换
+ */
+const onWeatherChange = (show: boolean) => {
+  const manager = getCesiumManager()
+  if (!manager) return
+
+  if (show) {
+    const viewer = manager.getViewer()
+    if (!viewer) return
+
+    console.log('[Map3D] Creating weather effect...')
+    const weatherEffect = new WeatherEffect(viewer)
+
+    // 获取主题颜色
+    const theme = getCurrentThemeColors()
+
+    // 根据天气类型创建效果
+    const options: any = {
+      coverageRadius: 2000,
+      followCamera: true
+    }
+
+    if (weatherType.value === 'rain' || weatherType.value === 'both') {
+      options.rain = {
+        intensity: rainIntensity.value,
+        density: 5000,
+        dropSize: 1.5,
+        fallSpeed: 20,
+        wind: {
+          direction: windDirection.value,
+          speed: windSpeed.value,
+          gustiness: 0.3,
+          turbulence: 0.2
+        },
+        color: (theme as any).rainColor || Cesium.Color.fromCssColorString('#aaccff'),
+        transparency: 0.4
+      }
+    }
+
+    if (weatherType.value === 'snow' || weatherType.value === 'both') {
+      options.snow = {
+        intensity: rainIntensity.value,
+        density: 3500,
+        flakeSize: 3.5,
+        fallSpeed: 2.5,
+        wind: {
+          direction: windDirection.value,
+          speed: windSpeed.value,
+          gustiness: 0.4,
+          turbulence: 0.5
+        },
+        color: (theme as any).snowColor || Cesium.Color.fromCssColorString('#ffffff'),
+        transparency: 0.5,
+        swirl: 0.8
+      }
+    }
+
+    weatherEffect.create(options)
+    effectsManager.addEffect('weather', weatherEffect)
+    console.log('[Map3D] Weather effect added to manager')
+
+    // 飞到合适视角观察天气效果
+    console.log('[Map3D] Flying to weather position...')
+
+
+
+
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(116.399944, 39.850510, 6800),
+      orientation: {
+        heading: Cesium.Math.toRadians(0),
+        pitch: Cesium.Math.toRadians(-30),
+        roll: 0
+      },
+      duration: 2
+    })
+
+    ElMessage.success('雨雪天气特效已开启')
+  } else {
+    effectsManager.removeEffect('weather')
+    ElMessage.success('雨雪天气特效已关闭')
+  }
+}
+
+/**
+ * 天气类型变化
+ */
+const onWeatherTypeChange = () => {
+  if (showWeather.value) {
+    // 先关闭再重新创建
+    onWeatherChange(false)
+    setTimeout(() => {
+      onWeatherChange(true)
+    }, 100)
+  }
+}
+
+/**
+ * 降水强度变化
+ */
+const onIntensityChange = () => {
+  const weatherEffect = effectsManager.getEffect('weather') as WeatherEffect
+  if (weatherEffect) {
+    weatherEffect.setRainIntensity(rainIntensity.value)
+    weatherEffect.setSnowIntensity(rainIntensity.value)
+  }
+}
+
+/**
+ * 风场变化
+ */
+const onWindChange = () => {
+  const weatherEffect = effectsManager.getEffect('weather') as WeatherEffect
+  if (weatherEffect) {
+    weatherEffect.setWind(windDirection.value, windSpeed.value)
+  }
+}
 </script>
 
 <style scoped lang="scss">
@@ -909,5 +1042,25 @@ const onFireSmokeChange = (show: boolean) => {
   flex: 1;
   font-size: 12px;
   color: #606266;
+}
+
+.weather-panel {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 280px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  padding: 16px;
+  z-index: 100;
+}
+
+.panel-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ebeef5;
 }
 </style>

@@ -9,3 +9,10 @@ export { LightWallEffect } from './lightWallEffect'
 export { PolylineTrailEffect } from './polylineTrailEffect'
 export { LightSpreadEffect } from './lightSpreadEffect'
 export { FireSmokeEffect } from './fireSmokeEffect'
+export { WeatherEffect } from './weatherEffect'
+export type {
+  WindField,
+  RainOptions,
+  SnowOptions,
+  WeatherOptions
+} from './weatherEffect'
