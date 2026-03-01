@@ -19,16 +19,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useAppStore } from '@/store/modules/app'
-import { useTagsViewStore } from '@/store/modules/tagsView'
 import Sidebar from './components/Sidebar.vue'
 import Header from './components/Header.vue'
 import AppMain from './components/AppMain.vue'
 
 const appStore = useAppStore()
-const tagsViewStore = useTagsViewStore()
 
 const isSidebar = computed(() => appStore.getLayout !== 'top')
-const cachedViews = computed(() => tagsViewStore.cachedViews)
+// tagsView 已移除，不再使用缓存
+const cachedViews = computed(() => [])
 </script>
 
 <style scoped lang="scss">

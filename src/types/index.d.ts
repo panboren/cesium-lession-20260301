@@ -4,23 +4,23 @@
 
 export type Nullable<T> = T | null | undefined
 
-export type Recordable<T = any> = Record<string, T>
+export type Recordable<T = unknown> = Record<string, T>
 
 export type TimeoutHandle = ReturnType<typeof setTimeout>
 
 export type IntervalHandle = ReturnType<typeof setInterval>
 
-export type Fn<T = any, R = T> = (...arg: T[]) => R
+export type Fn<T = unknown, R = T> = (...arg: T[]) => R
 
 export type TargetContext = '_self' | '_blank'
 
 export type ComponentElRef<T extends HTMLElement = HTMLDivElement> = {
   $el: T
-  $props: any
+  $props: unknown
 } & AnyObject
 
 export interface AnyObject {
-  [key: string]: any
+  [key: string]: unknown
 }
 
 export interface PageParams {
@@ -28,12 +28,12 @@ export interface PageParams {
   pageSize: number
 }
 
-export interface PageResult<T = any> {
+export interface PageResult<T = unknown> {
   list: T[]
   total: number
 }
 
-export interface ResponseResult<T = any> {
+export interface ResponseResult<T = unknown> {
   code: number
   data: T
   msg: string
@@ -44,7 +44,7 @@ export interface TreeData {
   label: string
   children?: TreeData[]
   disabled?: boolean
-  [key: string]: any
+  [key: string]: unknown
 }
 
 // 表格列定义
@@ -56,7 +56,7 @@ export interface TableColumn {
   fixed?: 'left' | 'right'
   align?: 'left' | 'center' | 'right'
   children?: TableColumn[]
-  [key: string]: any
+  [key: string]: unknown
 }
 
 // 表单定义
@@ -67,10 +67,10 @@ export interface FormSchema {
   componentProps?: Recordable
   formItemProps?: Recordable
   colProps?: Recordable
-  value?: any
-  rules?: any[]
+  value?: unknown
+  rules?: Array<Record<string, unknown>>
   hidden?: boolean
-  [key: string]: any
+  [key: string]: unknown
 }
 
 // 路由元信息
@@ -87,17 +87,17 @@ export interface RouteMeta {
   followAuth?: string
   roles?: string[]
   permissions?: string[]
-  [key: string]: any
+  [key: string]: unknown
 }
 
 export interface AppRouteRecordRaw {
   path: string
   name?: string
-  component?: any
+  component?: unknown
   redirect?: string
   meta?: RouteMeta
   children?: AppRouteRecordRaw[]
-  [key: string]: any
+  [key: string]: unknown
 }
 
 // 用户信息
@@ -112,7 +112,7 @@ export interface UserInfo {
   postIds: number[]
   status: number
   createTime: string
-  [key: string]: any
+  [key: string]: unknown
 }
 
 // 登录信息

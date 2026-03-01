@@ -5,13 +5,13 @@
 /**
  * 防抖
  */
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: unknown[]) => unknown>(
   fn: T,
   delay: number
 ): (...args: Parameters<T>) => void {
   let timer: ReturnType<typeof setTimeout> | null = null
 
-  return function (this: any, ...args: Parameters<T>) {
+  return function (this: unknown, ...args: Parameters<T>) {
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => {
       fn.apply(this, args)
@@ -22,14 +22,14 @@ export function debounce<T extends (...args: any[]) => any>(
 /**
  * 节流
  */
-export function throttle<T extends (...args: any[]) => any>(
+export function throttle<T extends (...args: unknown[]) => unknown>(
   fn: T,
   delay: number
 ): (...args: Parameters<T>) => void {
   let timer: ReturnType<typeof setTimeout> | null = null
   let lastTime = 0
 
-  return function (this: any, ...args: Parameters<T>) {
+  return function (this: unknown, ...args: Parameters<T>) {
     const now = Date.now()
     if (now - lastTime >= delay) {
       fn.apply(this, args)
@@ -49,17 +49,18 @@ export function throttle<T extends (...args: any[]) => any>(
  */
 export function deepClone<T>(obj: T): T {
   if (obj === null || typeof obj !== 'object') return obj
-  if (obj instanceof Date) return new Date(obj.getTime()) as any
-  if (obj instanceof Array) return obj.map((item) => deepClone(item)) as any
+  if (obj instanceof Date) return new Date(obj.getTime()) as T
+  if (obj instanceof Array) return obj.map((item) => deepClone(item)) as T
   if (obj instanceof Object) {
-    const clonedObj = {} as any
+    const clonedObj = {} as T
     for (const key in obj) {
       if (obj.hasOwnProperty(key)) {
-        clonedObj[key] = deepClone(obj[key])
+        ;(clonedObj as Record<string, unknown>)[key] = deepClone(obj[key])
       }
     }
     return clonedObj
   }
+  return obj
 }
 
 /**
@@ -111,7 +112,7 @@ export function isMobile(): boolean {
 /**
  * 判断是否为空
  */
-export function isEmpty(value: any): boolean {
+export function isEmpty(value: unknown): boolean {
   if (value === null || value === undefined) return true
   if (typeof value === 'string' && value.trim() === '') return true
   if (Array.isArray(value) && value.length === 0) return true
@@ -122,16 +123,16 @@ export function isEmpty(value: any): boolean {
 /**
  * 树形数据转扁平数组
  */
-export function treeToList(tree: any[], childrenKey: string = 'children'): any[] {
-  const list: any[] = []
+export function treeToList<T extends Record<string, unknown>>(tree: T[], childrenKey: string = 'children'): T[] {
+  const list: T[] = []
   const stack = [...tree]
 
   while (stack.length) {
     const node = stack.shift()
-    if (node[childrenKey]?.length) {
-      stack.unshift(...node[childrenKey])
+    if (node?.[childrenKey] && Array.isArray(node[childrenKey])) {
+      stack.unshift(...(node[childrenKey] as T[]))
     }
-    list.push(node)
+    list.push(node as T)
   }
 
   return list
@@ -140,20 +141,20 @@ export function treeToList(tree: any[], childrenKey: string = 'children'): any[]
 /**
  * 扁平数组转树形数据
  */
-export function listToTree(list: any[], idKey: string = 'id', parentIdKey: string = 'parentId'): any[] {
-  const map = new Map()
-  const tree: any[] = []
+export function listToTree<T extends Record<string, unknown>>(list: T[], idKey: string = 'id', parentIdKey: string = 'parentId'): T[] {
+  const map = new Map<unknown, T & { children: T[] }>()
+  const tree: T[] = []
 
   list.forEach((item) => {
-    map.set(item[idKey], { ...item, children: [] })
+    map.set(item[idKey], { ...item, children: [] } as T & { children: T[] })
   })
 
   list.forEach((item) => {
     const node = map.get(item[idKey])
     const parent = map.get(item[parentIdKey])
-    if (parent) {
+    if (parent && node) {
       parent.children.push(node)
-    } else {
+    } else if (node) {
       tree.push(node)
     }
   })

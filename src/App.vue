@@ -1,21 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useAppStore } from '@/store/modules/app'
-import { useI18n } from 'vue-i18n'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
-import en from 'element-plus/es/locale/lang/en'
 
-const appStore = useAppStore()
-const { locale } = useI18n()
-
-// 根据 i18n locale 动态设置 Element Plus locale
-const elementPlusLocale = computed(() => {
-  const locales: Record<string, any> = {
-    'zh-CN': zhCn,
-    'en-US': en
-  }
-  return locales[locale.value] || zhCn
-})
+// 使用中文作为默认语言
+const elementPlusLocale = computed(() => zhCn)
 </script>
 
 <template>

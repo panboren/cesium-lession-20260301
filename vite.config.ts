@@ -11,7 +11,7 @@ import { visualizer } from 'rollup-plugin-visualizer'
 import viteCompression from 'vite-plugin-compression'
 import { ConfigEnv } from 'vite'
 import path from 'path'
-import vueI18n from '@intlify/unplugin-vue-i18n/vite'
+import cesium from 'vite-plugin-cesium'
 
 // https://vitejs.dev/config/
 export default ({ mode }: ConfigEnv) => {
@@ -25,6 +25,7 @@ export default ({ mode }: ConfigEnv) => {
       Vue(),
       VueJsx(),
       UnoCSS(),
+      cesium(),
       AutoImport({
         imports: [
           'vue',
@@ -35,9 +36,6 @@ export default ({ mode }: ConfigEnv) => {
           },
           {
             '@/hooks/web/useMessage': ['useMessage']
-          },
-          {
-            '@/utils/auth': ['getAccessToken', 'setToken']
           }
         ],
         dts: 'src/types/auto-imports.d.ts',
@@ -62,18 +60,6 @@ export default ({ mode }: ConfigEnv) => {
         minify: true,
         template: 'index.html'
       }),
-      vueI18n({
-        strictMessage: false,
-        include: [path.resolve(__dirname, './src/locales/**')]
-      }) as PluginOption,
-      // Gzip 压缩
-      viteCompression({
-        verbose: true,
-        disable: !isBuild,
-        threshold: 10240,
-        algorithm: 'gzip',
-        ext: '.gz'
-      }),
       // Brotli 压缩（比 gzip 更好）
       viteCompression({
         verbose: true,
@@ -82,6 +68,17 @@ export default ({ mode }: ConfigEnv) => {
         algorithm: 'brotliCompress',
         ext: '.br'
       }),
+      // Cesium 资源复制
+      {
+        name: 'cesium-assets',
+        generateBundle() {
+          this.emitFile({
+            type: 'asset',
+            fileName: 'cesiumAssetPath.js',
+            source: 'window.CESIUM_BASE_URL = "./cesium/";'
+          })
+        }
+      },
       // 打包体积分析
       isBuild &&
         visualizer({
@@ -93,8 +90,7 @@ export default ({ mode }: ConfigEnv) => {
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, './src'),
-        'vue-i18n': 'vue-i18n/dist/vue-i18n.cjs.js'
+        '@': path.resolve(__dirname, './src')
       },
       // 依赖预构建优化
       optimizeDeps: {
@@ -105,7 +101,14 @@ export default ({ mode }: ConfigEnv) => {
           'element-plus',
           '@element-plus/icons-vue',
           'axios',
-          'dayjs'
+          'dayjs',
+          'lodash-es',
+          'mitt',
+          'cesium',
+          '@turf/turf',
+          'proj4',
+          'screenfull',
+          'nprogress'
         ]
       }
     },
@@ -172,13 +175,9 @@ export default ({ mode }: ConfigEnv) => {
               if (id.includes('element-plus') || id.includes('@element-plus')) {
                 return 'element-plus'
               }
-              // ECharts
-              if (id.includes('echarts')) {
-                return 'echarts'
-              }
-              // 图标库
-              if (id.includes('@iconify')) {
-                return 'icons'
+              // Cesium
+              if (id.includes('cesium')) {
+                return 'cesium'
               }
               // 工具库
               if (
@@ -191,13 +190,9 @@ export default ({ mode }: ConfigEnv) => {
               ) {
                 return 'utils'
               }
-              // 编辑器
-              if (id.includes('@wangeditor')) {
-                return 'editor'
-              }
-              // 国际化
-              if (id.includes('vue-i18n') || id.includes('@intlify')) {
-                return 'i18n'
+              // 地理空间库
+              if (id.includes('@turf') || id.includes('proj4')) {
+                return 'geospatial'
               }
               // 其他第三方库
               return 'vendor'
@@ -216,7 +211,7 @@ export default ({ mode }: ConfigEnv) => {
           }
         }
       },
-      chunkSizeWarningLimit: 1000,
+      chunkSizeWarningLimit: 2000,
       // 优化模块加载
       moduleIds: 'deterministic'
     },

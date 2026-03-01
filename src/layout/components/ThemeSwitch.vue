@@ -37,21 +37,13 @@ const isDark = computed({
   get: () => appStore.getIsDark,
   set: (val) => {
     appStore.setIsDark(val)
-    if (val) {
-      document.documentElement.classList.add('dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-    }
+    theme.toggleDark()
   }
 })
 
 const toggleTheme = () => {
   appStore.setIsDark(isDark.value)
-  if (isDark.value) {
-    document.documentElement.classList.add('dark')
-  } else {
-    document.documentElement.classList.remove('dark')
-  }
+  theme.toggleDark()
 }
 
 const themeColors = [
