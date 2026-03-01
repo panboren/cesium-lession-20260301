@@ -80,6 +80,9 @@
             <el-form-item label="飞线特效">
               <el-switch v-model="showFlyLines" @change="onFlyLinesChange" />
             </el-form-item>
+            <el-form-item label="火焰/烟雾">
+              <el-switch v-model="showFireSmoke" @change="onFireSmokeChange" />
+            </el-form-item>
           </el-form>
         </el-collapse-item>
       </el-collapse>
@@ -123,7 +126,8 @@ import {
   RadarEffect,
   LightWallEffect,
   LightSpreadEffect,
-  PolylineTrailEffect
+  PolylineTrailEffect,
+  FireSmokeEffect
 } from '@/cesium/effects'
 import { registerCustomMaterials, setEffectTheme } from '@/cesium/materials/customMaterials'
 import type { DrawResult, CameraPosition } from '@/types/cesium'
@@ -166,6 +170,7 @@ const showRadar = ref(false)
 const showLightWall = ref(false)
 const showLightSpread = ref(false)
 const showFlyLines = ref(false)
+const showFireSmoke = ref(false)
 const effectTheme = ref('cyan')
 const drawResults = ref<DrawResult[]>([])
 const cameraInfo = ref<CameraPosition | null>(null)
@@ -523,6 +528,10 @@ const onEffectThemeChange = () => {
     onFlyLinesChange(false)
     setTimeout(() => onFlyLinesChange(true), 100)
   }
+  if (showFireSmoke.value) {
+    onFireSmokeChange(false)
+    setTimeout(() => onFireSmokeChange(true), 100)
+  }
 }
 
 /**
@@ -709,6 +718,51 @@ const onFlyLinesChange = (show: boolean) => {
   } else {
     effectsManager.removeEffect('flyLines')
     ElMessage.success('飞线特效已关闭')
+  }
+}
+
+/**
+ * 火焰/烟雾特效切换
+ */
+const onFireSmokeChange = (show: boolean) => {
+  const manager = getCesiumManager()
+  if (!manager) return
+
+  if (show) {
+    const viewer = manager.getViewer()
+    if (!viewer) return
+
+    // 在指定位置创建火焰/烟雾
+    console.log('[Map3D] Creating fire and smoke effect...')
+    const fireSmokeEffect = new FireSmokeEffect(viewer)
+    fireSmokeEffect.create(116.3920274, 39.907801, {
+      height: 179.26,
+      fireColor: Cesium.Color.fromCssColorString('#ff4500'),
+      fireIntensity: 1.0,
+      smokeColor: Cesium.Color.fromCssColorString('#808080'),
+      smokeIntensity: 0.6,
+      windDirection: 45,
+      windSpeed: 1.5
+    })
+    effectsManager.addEffect('fireSmoke', fireSmokeEffect)
+    console.log('[Map3D] Fire and smoke effect added to manager')
+
+    // 飞到火焰位置附近观察 - 相机在火焰侧面200米处
+    console.log('[Map3D] Flying to fire smoke position...')
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(116.392863, 39.907827, 200), // 约200米水平距离
+      orientation: {
+        heading: Cesium.Math.toRadians(270), // 朝向火焰（西向）
+        pitch: Cesium.Math.toRadians(-15),
+        roll: 0
+      },
+      duration: 2
+    })
+
+    ElMessage.success('火焰/烟雾特效已开启')
+  } else {
+    effectsManager.removeEffect('fireSmoke')
+    ElMessage.success('火焰/烟雾特效已关闭')
   }
 }
 </script>
