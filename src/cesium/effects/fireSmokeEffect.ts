@@ -150,8 +150,8 @@ export class FireSmokeEffect {
     // 创建火焰粒子系统
     this.fireSystem = new Cesium.ParticleSystem({
       image: fireTextureUrl,
-      startColor: Cesium.Color.fromCssColorString('#ffcc00').withAlpha(this.defaultOptions.fireIntensity), // 亮黄色
-      endColor: Cesium.Color.fromCssColorString('#ff4500').withAlpha(0.0), // 橙红色
+      startColor: this.defaultOptions.fireColor.withAlpha(this.defaultOptions.fireIntensity),
+      endColor: this.defaultOptions.fireColor.withAlpha(0.0),
       startScale: 1.5,
       endScale: 4.0,
       minimumParticleLife: this.defaultOptions.fireMinimumLife,
@@ -186,7 +186,7 @@ export class FireSmokeEffect {
     this.smokeSystem = new Cesium.ParticleSystem({
       image: smokeTextureUrl,
       startColor: this.defaultOptions.smokeColor.withAlpha(this.defaultOptions.smokeIntensity),
-      endColor: Cesium.Color.fromCssColorString('#606060').withAlpha(0.0),
+      endColor: this.defaultOptions.smokeColor.withAlpha(0.0),
       startScale: 2.0,
       endScale: 8.0,
       minimumParticleLife: this.defaultOptions.smokeMinimumLife,
@@ -316,5 +316,19 @@ export class FireSmokeEffect {
     this.smokeEntity = null
 
     console.log('[FireSmokeEffect] Fire and smoke destroyed')
+  }
+
+  /**
+   * 获取火焰粒子系统
+   */
+  getFireSystem(): Cesium.ParticleSystem | null {
+    return this.fireSystem
+  }
+
+  /**
+   * 获取烟雾粒子系统
+   */
+  getSmokeSystem(): Cesium.ParticleSystem | null {
+    return this.smokeSystem
   }
 }

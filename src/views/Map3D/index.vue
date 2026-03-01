@@ -66,6 +66,7 @@
                 <el-option label="黄金未来" value="golden-future" />
                 <el-option label="极光幻彩" value="aurora" />
                 <el-option label="量子深空" value="quantum" />
+                <el-option label="烈焰红莲" value="fire" />
               </el-select>
             </el-form-item>
             <el-form-item label="雷达扫描">
@@ -482,6 +483,83 @@ const effectThemes = {
     centerColor: Cesium.Color.fromCssColorString('#00bfff'),
     waveColor: Cesium.Color.fromCssColorString('#9370db'),
     headColor: Cesium.Color.fromCssColorString('#00bfff')
+  },
+  fire: {
+    fireColor: Cesium.Color.fromCssColorString('#ff4500'),
+    smokeColor: Cesium.Color.fromCssColorString('#808080'),
+    color: Cesium.Color.fromCssColorString('#ff4500'),
+    scanColor: Cesium.Color.fromCssColorString('#ff4500'),
+    ringColor: Cesium.Color.fromCssColorString('#ff6600'),
+    beamColor: Cesium.Color.fromCssColorString('#ff4500'),
+    centerColor: Cesium.Color.fromCssColorString('#ffcc00'),
+    waveColor: Cesium.Color.fromCssColorString('#ff4500'),
+    headColor: Cesium.Color.fromCssColorString('#ffcc00')
+  },
+  cyan: {
+    fireColor: Cesium.Color.fromCssColorString('#00ffff'),
+    smokeColor: Cesium.Color.fromCssColorString('#808080'),
+    color: Cesium.Color.CYAN,
+    scanColor: Cesium.Color.fromCssColorString('#00ffff'),
+    ringColor: Cesium.Color.fromCssColorString('#00cccc'),
+    beamColor: Cesium.Color.fromCssColorString('#00ffff'),
+    centerColor: Cesium.Color.fromCssColorString('#00ffff'),
+    waveColor: Cesium.Color.fromCssColorString('#00d9ff'),
+    headColor: Cesium.Color.fromCssColorString('#00ffff')
+  },
+  'purple-blue': {
+    fireColor: Cesium.Color.fromCssColorString('#550598'),
+    smokeColor: Cesium.Color.fromCssColorString('#808080'),
+    color: Cesium.Color.fromCssColorString('#07329f'),
+    scanColor: Cesium.Color.fromCssColorString('#550598'),
+    ringColor: Cesium.Color.fromCssColorString('#550598'),
+    beamColor: Cesium.Color.fromCssColorString('#550598'),
+    centerColor: Cesium.Color.fromCssColorString('#550598'),
+    waveColor: Cesium.Color.fromCssColorString('#550598'),
+    headColor: Cesium.Color.fromCssColorString('#550598')
+  },
+  'neon-cyber': {
+    fireColor: Cesium.Color.fromCssColorString('#ff00ff'),
+    smokeColor: Cesium.Color.fromCssColorString('#808080'),
+    color: Cesium.Color.fromCssColorString('#ff00ff'),
+    scanColor: Cesium.Color.fromCssColorString('#00ffff'),
+    ringColor: Cesium.Color.fromCssColorString('#ff00aa'),
+    beamColor: Cesium.Color.fromCssColorString('#00ffff'),
+    centerColor: Cesium.Color.fromCssColorString('#ff00ff'),
+    waveColor: Cesium.Color.fromCssColorString('#00ffff'),
+    headColor: Cesium.Color.fromCssColorString('#00ffff')
+  },
+  'golden-future': {
+    fireColor: Cesium.Color.fromCssColorString('#ffd700'),
+    smokeColor: Cesium.Color.fromCssColorString('#808080'),
+    color: Cesium.Color.fromCssColorString('#ff6b00'),
+    scanColor: Cesium.Color.fromCssColorString('#ffd700'),
+    ringColor: Cesium.Color.fromCssColorString('#ff8c00'),
+    beamColor: Cesium.Color.fromCssColorString('#ffd700'),
+    centerColor: Cesium.Color.fromCssColorString('#ffd700'),
+    waveColor: Cesium.Color.fromCssColorString('#ffa500'),
+    headColor: Cesium.Color.fromCssColorString('#ffd700')
+  },
+  aurora: {
+    fireColor: Cesium.Color.fromCssColorString('#00ff88'),
+    smokeColor: Cesium.Color.fromCssColorString('#808080'),
+    color: Cesium.Color.fromCssColorString('#00ff88'),
+    scanColor: Cesium.Color.fromCssColorString('#00ffff'),
+    ringColor: Cesium.Color.fromCssColorString('#00ffcc'),
+    beamColor: Cesium.Color.fromCssColorString('#88ff00'),
+    centerColor: Cesium.Color.fromCssColorString('#00ffff'),
+    waveColor: Cesium.Color.fromCssColorString('#00ff88'),
+    headColor: Cesium.Color.fromCssColorString('#00ffff')
+  },
+  quantum: {
+    fireColor: Cesium.Color.fromCssColorString('#8a2be2'),
+    smokeColor: Cesium.Color.fromCssColorString('#808080'),
+    color: Cesium.Color.fromCssColorString('#8a2be2'),
+    scanColor: Cesium.Color.fromCssColorString('#00bfff'),
+    ringColor: Cesium.Color.fromCssColorString('#9932cc'),
+    beamColor: Cesium.Color.fromCssColorString('#00bfff'),
+    centerColor: Cesium.Color.fromCssColorString('#00bfff'),
+    waveColor: Cesium.Color.fromCssColorString('#9370db'),
+    headColor: Cesium.Color.fromCssColorString('#00bfff')
   }
 }
 
@@ -502,7 +580,8 @@ const onEffectThemeChange = () => {
     'neon-cyber': '霓虹赛博',
     'golden-future': '黄金未来',
     aurora: '极光幻彩',
-    quantum: '量子深空'
+    quantum: '量子深空',
+    fire: '烈焰红莲'
   }
 
   const themeName = themeMap[effectTheme.value] || effectTheme.value
@@ -734,12 +813,18 @@ const onFireSmokeChange = (show: boolean) => {
 
     // 在指定位置创建火焰/烟雾
     console.log('[Map3D] Creating fire and smoke effect...')
+    const theme = getCurrentThemeColors()
     const fireSmokeEffect = new FireSmokeEffect(viewer)
+
+    // 根据主题设置火焰颜色
+    const fireColor = (theme as any).fireColor || Cesium.Color.fromCssColorString('#ff4500')
+    const smokeColor = (theme as any).smokeColor || Cesium.Color.fromCssColorString('#808080')
+
     fireSmokeEffect.create(116.3920274, 39.907801, {
       height: 179.26,
-      fireColor: Cesium.Color.fromCssColorString('#ff4500'),
+      fireColor: fireColor,
       fireIntensity: 1.0,
-      smokeColor: Cesium.Color.fromCssColorString('#808080'),
+      smokeColor: smokeColor,
       smokeIntensity: 0.6,
       windDirection: 45,
       windSpeed: 1.5
