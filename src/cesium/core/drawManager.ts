@@ -9,17 +9,550 @@ import { DrawType } from '@/types/cesium'
 import type { DrawStyle, DrawConfig, DrawEvent } from '@/types/cesium'
 
 /**
- * 绘图管理器
+ * 绘制上下文
+ */
+interface DrawContext {
+  viewer: Cesium.Viewer
+  handler: Cesium.ScreenSpaceEventHandler
+  config: DrawConfig
+  tempPositions: Cesium.Cartesian3[]
+  activeEntity: Cesium.Entity | null
+  onEntityCreated: (entity: Cesium.Entity) => void
+  onFinish: () => void
+}
+
+/**
+ * 绘制策略基类
+ */
+abstract class DrawStrategy {
+  protected context: DrawContext
+
+  constructor(context: DrawContext) {
+    this.context = context
+  }
+
+  /**
+   * 设置事件处理器
+   */
+  abstract setupEvents(): void
+
+  /**
+   * 清理资源
+   */
+  cleanup(): void {
+    // 子类可覆盖
+  }
+
+  /**
+   * 获取默认样式
+   */
+  protected getDefaultStyle(type: DrawType): DrawStyle {
+    switch (type) {
+      case DrawType.POINT:
+        return {
+          point: {
+            pixelSize: 50,
+            color: Cesium.Color.YELLOW,
+            outlineColor: Cesium.Color.RED,
+            outlineWidth: 5,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
+          }
+        }
+      case DrawType.POLYLINE:
+        return {
+          line: {
+            width: 5,
+            material: Cesium.Color.RED,
+            clampToGround: false
+          }
+        }
+      case DrawType.POLYGON:
+      case DrawType.CIRCLE:
+      case DrawType.RECTANGLE:
+        return {
+          polygon: {
+            material: Cesium.Color.RED.withAlpha(0.6),
+            outline: true,
+            outlineColor: Cesium.Color.WHITE,
+            outlineWidth: 4,
+            perPositionHeight: false
+          }
+        }
+      default:
+        return {}
+    }
+  }
+}
+
+/**
+ * 点绘制策略
+ */
+class PointDrawStrategy extends DrawStrategy {
+  setupEvents(): void {
+    this.context.handler.setInputAction(
+      (click: Cesium.ScreenSpaceEventHandler.ClickedEvent) => {
+        const cartesian = this.pickPosition(click.position)
+        if (!cartesian) return
+
+        this.context.tempPositions.push(cartesian)
+
+        const style = this.context.config.style || this.getDefaultStyle(DrawType.POINT)
+
+        // 创建 Entity
+        const entity = this.context.viewer.entities.add({
+          position: cartesian,
+          point: style.point,
+          properties: this.context.config.properties
+        })
+
+        this.context.activeEntity = entity
+        this.context.onEntityCreated(entity)
+        this.context.onFinish()
+      },
+      Cesium.ScreenSpaceEventType.LEFT_CLICK
+    )
+  }
+
+  private pickPosition(windowPosition: Cesium.Cartesian2): Cesium.Cartesian3 | undefined {
+    const viewer = this.context.viewer
+
+    // 尝试多种拾取方式
+    let cartesian = viewer.scene.pickPosition(windowPosition)
+    if (!cartesian) {
+      cartesian = viewer.camera.pickEllipsoid(windowPosition, viewer.scene.globe.ellipsoid)
+    }
+    if (!cartesian) {
+      const ray = viewer.camera.getPickRay(windowPosition)
+      cartesian = viewer.scene.globe.pick(ray!, viewer.scene)
+    }
+
+    return cartesian || undefined
+  }
+}
+
+/**
+ * 线绘制策略
+ */
+class PolylineDrawStrategy extends DrawStrategy {
+  private positions: Cesium.Cartesian3[] = []
+
+  setupEvents(): void {
+    const handler = this.context.handler
+
+    // 点击添加点
+    handler.setInputAction(
+      (click: Cesium.ScreenSpaceEventHandler.ClickedEvent) => {
+        const cartesian = this.pickPosition(click.position)
+        if (!cartesian) return
+
+        this.positions.push(cartesian)
+        this.context.tempPositions = this.positions
+
+        if (this.positions.length === 1) {
+          this.createDynamicPolyline()
+        }
+      },
+      Cesium.ScreenSpaceEventType.LEFT_CLICK
+    )
+
+    // 移动更新预览
+    handler.setInputAction(
+      (move: Cesium.ScreenSpaceEventHandler.MotionEvent) => {
+        if (this.positions.length > 0) {
+          const cartesian = this.pickPosition(move.endPosition)
+          if (cartesian && this.context.activeEntity) {
+            const previewPositions = [...this.positions, cartesian]
+            ;(this.context.activeEntity.polyline as any).positions = new Cesium.CallbackProperty(
+              () => previewPositions,
+              false
+            )
+          }
+        }
+      },
+      Cesium.ScreenSpaceEventType.MOUSE_MOVE
+    )
+
+    // 双击结束绘制
+    handler.setInputAction(() => {
+      this.context.onFinish()
+    }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK)
+  }
+
+  private createDynamicPolyline(): void {
+    const style = this.context.config.style || this.getDefaultStyle(DrawType.POLYLINE)
+
+    const entity = this.context.viewer.entities.add({
+      polyline: {
+        positions: new Cesium.CallbackProperty(() => this.positions, false),
+        width: style.line?.width || 3,
+        material: style.line?.material || Cesium.Color.CYAN,
+        clampToGround: style.line?.clampToGround ?? true
+      }
+    })
+
+    this.context.activeEntity = entity
+    this.context.onEntityCreated(entity)
+  }
+
+  private pickPosition(windowPosition: Cesium.Cartesian2): Cesium.Cartesian3 | undefined {
+    const viewer = this.context.viewer
+    let cartesian = viewer.scene.pickPosition(windowPosition)
+    if (!cartesian) {
+      cartesian = viewer.camera.pickEllipsoid(windowPosition, viewer.scene.globe.ellipsoid)
+    }
+    if (!cartesian) {
+      const ray = viewer.camera.getPickRay(windowPosition)
+      cartesian = viewer.scene.globe.pick(ray!, viewer.scene)
+    }
+    return cartesian || undefined
+  }
+}
+
+/**
+ * 面绘制策略
+ */
+class PolygonDrawStrategy extends DrawStrategy {
+  private positions: Cesium.Cartesian3[] = []
+
+  setupEvents(): void {
+    const handler = this.context.handler
+
+    // 点击添加点
+    handler.setInputAction(
+      (click: Cesium.ScreenSpaceEventHandler.ClickedEvent) => {
+        const cartesian = this.pickPosition(click.position)
+        if (!cartesian) return
+
+        this.positions.push(cartesian)
+        this.context.tempPositions = this.positions
+
+        if (this.positions.length === 1) {
+          this.createDynamicPolygon()
+        }
+      },
+      Cesium.ScreenSpaceEventType.LEFT_CLICK
+    )
+
+    // 移动更新预览
+    handler.setInputAction(
+      (move: Cesium.ScreenSpaceEventHandler.MotionEvent) => {
+        if (this.positions.length > 0) {
+          const cartesian = this.pickPosition(move.endPosition)
+          if (cartesian && this.context.activeEntity) {
+            const previewPositions = [...this.positions, cartesian]
+            ;(this.context.activeEntity.polygon as any).hierarchy = new Cesium.CallbackProperty(
+              () => {
+                return previewPositions.length >= 3
+                  ? new Cesium.PolygonHierarchy(previewPositions)
+                  : null
+              },
+              false
+            )
+          }
+        }
+      },
+      Cesium.ScreenSpaceEventType.MOUSE_MOVE
+    )
+
+    // 双击结束绘制
+    handler.setInputAction(() => {
+      this.context.onFinish()
+    }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK)
+  }
+
+  private createDynamicPolygon(): void {
+    const style = this.context.config.style || this.getDefaultStyle(DrawType.POLYGON)
+
+    const entity = this.context.viewer.entities.add({
+      polygon: {
+        hierarchy: new Cesium.CallbackProperty(() => {
+          return this.positions.length >= 3
+            ? new Cesium.PolygonHierarchy(this.positions)
+            : null
+        }, false),
+        material: style.polygon?.material || Cesium.Color.CYAN.withAlpha(0.5),
+        outline: style.polygon?.outline ?? true,
+        outlineColor: style.polygon?.outlineColor || Cesium.Color.CYAN,
+        outlineWidth: style.polygon?.outlineWidth || 2,
+        perPositionHeight: style.polygon?.perPositionHeight ?? false
+      }
+    })
+
+    this.context.activeEntity = entity
+    this.context.onEntityCreated(entity)
+  }
+
+  private pickPosition(windowPosition: Cesium.Cartesian2): Cesium.Cartesian3 | undefined {
+    const viewer = this.context.viewer
+    let cartesian = viewer.scene.pickPosition(windowPosition)
+    if (!cartesian) {
+      cartesian = viewer.camera.pickEllipsoid(windowPosition, viewer.scene.globe.ellipsoid)
+    }
+    if (!cartesian) {
+      const ray = viewer.camera.getPickRay(windowPosition)
+      cartesian = viewer.scene.globe.pick(ray!, viewer.scene)
+    }
+    return cartesian || undefined
+  }
+}
+
+/**
+ * 圆绘制策略（使用两点击模式）
+ */
+class CircleDrawStrategy extends DrawStrategy {
+  private centerPosition: Cesium.Cartesian3 | null = null
+  private currentRadius = 0
+  private clickCount = 0
+  private isDrawing = false
+
+  setupEvents(): void {
+    const handler = this.context.handler
+
+    // 点击事件
+    handler.setInputAction(
+      (click: Cesium.ScreenSpaceEventHandler.ClickedEvent) => {
+        const cartesian = this.pickPosition(click.position)
+        if (!cartesian) return
+
+        this.clickCount++
+
+        if (this.clickCount === 1) {
+          // 第一次点击：设置圆心
+          this.centerPosition = cartesian
+          this.context.tempPositions = [cartesian]
+          this.isDrawing = true
+          this.createDynamicCircle()
+        } else if (this.clickCount === 2 && this.isDrawing) {
+          // 第二次点击：结束绘制
+          this.finishCircle()
+        }
+      },
+      Cesium.ScreenSpaceEventType.LEFT_CLICK
+    )
+
+    // 移动更新半径
+    handler.setInputAction(
+      (move: Cesium.ScreenSpaceEventHandler.MotionEvent) => {
+        if (this.isDrawing && this.centerPosition) {
+          const cartesian = this.pickPosition(move.endPosition)
+          if (cartesian) {
+            this.currentRadius = Cesium.Cartesian3.distance(this.centerPosition, cartesian)
+            this.updateCircleRadius()
+          }
+        }
+      },
+      Cesium.ScreenSpaceEventType.MOUSE_MOVE
+    )
+  }
+
+  private createDynamicCircle(): void {
+    if (!this.centerPosition) return
+
+    const style = this.context.config.style || this.getDefaultStyle(DrawType.CIRCLE)
+
+    const entity = this.context.viewer.entities.add({
+      position: this.centerPosition,
+      ellipse: {
+        semiMinorAxis: new Cesium.CallbackProperty(() => this.currentRadius, false),
+        semiMajorAxis: new Cesium.CallbackProperty(() => this.currentRadius, false),
+        height: 0,
+        material: style.polygon?.material || Cesium.Color.RED.withAlpha(0.6),
+        outline: style.polygon?.outline ?? true,
+        outlineColor: style.polygon?.outlineColor || Cesium.Color.WHITE,
+        outlineWidth: 4,
+        classificationType: Cesium.ClassificationType.TERRAIN
+      }
+    })
+
+    this.context.activeEntity = entity
+    this.context.onEntityCreated(entity)
+  }
+
+  private updateCircleRadius(): void {
+    if (this.context.activeEntity) {
+      ;(this.context.activeEntity.ellipse as any).semiMinorAxis = this.currentRadius
+      ;(this.context.activeEntity.ellipse as any).semiMajorAxis = this.currentRadius
+    }
+  }
+
+  private finishCircle(): void {
+    if (this.context.activeEntity && this.centerPosition) {
+      // 固定半径值
+      ;(this.context.activeEntity.ellipse as any).semiMinorAxis = this.currentRadius
+      ;(this.context.activeEntity.ellipse as any).semiMajorAxis = this.currentRadius
+
+      // 添加圆的边界点到 positions 用于计算包围盒
+      const numPoints = 8
+      const radius = this.currentRadius
+      for (let i = 0; i < numPoints; i++) {
+        const angle = (i / numPoints) * 2 * Math.PI
+        const cartographic = Cesium.Cartographic.fromCartesian(this.centerPosition)
+        const point = Cesium.Cartesian3.fromRadians(
+          cartographic.longitude + (radius / 6378137) * Math.cos(angle),
+          cartographic.latitude + (radius / 6378137) * Math.sin(angle),
+          cartographic.height
+        )
+        this.context.tempPositions.push(point)
+      }
+    }
+
+    this.isDrawing = false
+    this.context.onFinish()
+  }
+
+  private pickPosition(windowPosition: Cesium.Cartesian2): Cesium.Cartesian3 | undefined {
+    const viewer = this.context.viewer
+    let cartesian = viewer.scene.pickPosition(windowPosition)
+    if (!cartesian) {
+      cartesian = viewer.camera.pickEllipsoid(windowPosition, viewer.scene.globe.ellipsoid)
+    }
+    if (!cartesian) {
+      const ray = viewer.camera.getPickRay(windowPosition)
+      cartesian = viewer.scene.globe.pick(ray!, viewer.scene)
+    }
+    return cartesian || undefined
+  }
+}
+
+/**
+ * 矩形绘制策略（使用两点击模式）
+ */
+class RectangleDrawStrategy extends DrawStrategy {
+  private startPosition: Cesium.Cartesian3 | null = null
+  private currentRectangle: Cesium.Rectangle | null = null
+  private clickCount = 0
+  private isDrawing = false
+
+  setupEvents(): void {
+    const handler = this.context.handler
+
+    // 点击事件
+    handler.setInputAction(
+      (click: Cesium.ScreenSpaceEventHandler.ClickedEvent) => {
+        const cartesian = this.pickPosition(click.position)
+        if (!cartesian) return
+
+        this.clickCount++
+
+        if (this.clickCount === 1) {
+          // 第一次点击：设置起点
+          this.startPosition = cartesian
+          this.context.tempPositions = [cartesian]
+          this.isDrawing = true
+        } else if (this.clickCount === 2 && this.isDrawing) {
+          // 第二次点击：结束绘制
+          this.finishRectangle()
+        }
+      },
+      Cesium.ScreenSpaceEventType.LEFT_CLICK
+    )
+
+    // 移动更新矩形
+    handler.setInputAction(
+      (move: Cesium.ScreenSpaceEventHandler.MotionEvent) => {
+        if (this.isDrawing && this.startPosition) {
+          const cartesian = this.pickPosition(move.endPosition)
+          if (cartesian) {
+            this.updateRectangle(cartesian)
+          }
+        }
+      },
+      Cesium.ScreenSpaceEventType.MOUSE_MOVE
+    )
+  }
+
+  private updateRectangle(endPosition: Cesium.Cartesian3): void {
+    const startCartographic = Cesium.Cartographic.fromCartesian(this.startPosition!)
+    const endCartographic = Cesium.Cartographic.fromCartesian(endPosition)
+
+    this.currentRectangle = Cesium.Rectangle.fromCartographicArray([
+      startCartographic,
+      endCartographic
+    ])
+
+    if (!this.context.activeEntity && this.currentRectangle) {
+      const style = this.context.config.style || this.getDefaultStyle(DrawType.RECTANGLE)
+
+      const entity = this.context.viewer.entities.add({
+        rectangle: {
+          coordinates: this.currentRectangle,
+          material: style.polygon?.material || Cesium.Color.RED.withAlpha(0.6),
+          outline: style.polygon?.outline ?? true,
+          outlineColor: style.polygon?.outlineColor || Cesium.Color.WHITE,
+          outlineWidth: 4,
+          height: 0,
+          classificationType: Cesium.ClassificationType.TERRAIN
+        }
+      })
+
+      this.context.activeEntity = entity
+      this.context.onEntityCreated(entity)
+    } else if (this.context.activeEntity && this.currentRectangle) {
+      ;(this.context.activeEntity.rectangle as any).coordinates = this.currentRectangle
+    }
+  }
+
+  private finishRectangle(): void {
+    // 如果没有移动鼠标，创建一个默认大小的矩形
+    if (this.startPosition && !this.currentRectangle) {
+      const startCartographic = Cesium.Cartographic.fromCartesian(this.startPosition)
+      const smallOffset = 0.001
+      this.currentRectangle = Cesium.Rectangle.fromCartographicArray([
+        startCartographic,
+        new Cesium.Cartographic(
+          startCartographic.longitude + smallOffset,
+          startCartographic.latitude + smallOffset
+        )
+      ])
+    }
+
+    if (this.currentRectangle && this.context.activeEntity) {
+      ;(this.context.activeEntity.rectangle as any).coordinates = this.currentRectangle
+
+      // 添加矩形的四个角点到 tempPositions 用于计算包围盒
+      const west = Cesium.Math.toDegrees(this.currentRectangle.west)
+      const south = Cesium.Math.toDegrees(this.currentRectangle.south)
+      const east = Cesium.Math.toDegrees(this.currentRectangle.east)
+      const north = Cesium.Math.toDegrees(this.currentRectangle.north)
+
+      this.context.tempPositions = [
+        Cesium.Cartesian3.fromDegrees(west, south),
+        Cesium.Cartesian3.fromDegrees(east, south),
+        Cesium.Cartesian3.fromDegrees(east, north),
+        Cesium.Cartesian3.fromDegrees(west, north)
+      ]
+    }
+
+    this.isDrawing = false
+    this.context.onFinish()
+  }
+
+  private pickPosition(windowPosition: Cesium.Cartesian2): Cesium.Cartesian3 | undefined {
+    const viewer = this.context.viewer
+    let cartesian = viewer.scene.pickPosition(windowPosition)
+    if (!cartesian) {
+      cartesian = viewer.camera.pickEllipsoid(windowPosition, viewer.scene.globe.ellipsoid)
+    }
+    if (!cartesian) {
+      const ray = viewer.camera.getPickRay(windowPosition)
+      cartesian = viewer.scene.globe.pick(ray!, viewer.scene)
+    }
+    return cartesian || undefined
+  }
+}
+
+/**
+ * 绘制管理器
  */
 export class DrawManager {
   private viewer: Cesium.Viewer | null = null
   private drawing: boolean = false
   private currentDrawType: DrawType | null = null
   private activeEntity: Cesium.Entity | null = null
-  private tempEntities: Cesium.Entity[] = []
   private tempPositions: Cesium.Cartesian3[] = []
   private handler: Cesium.ScreenSpaceEventHandler | null = null
   private eventCallbacks: Map<string, ((event: DrawEvent) => void)[]> = new Map()
+  private currentStrategy: DrawStrategy | null = null
 
   constructor() {
     const manager = getCesiumManager()
@@ -32,6 +565,16 @@ export class DrawManager {
    * 开始绘制
    */
   startDraw(config: DrawConfig): void {
+    this.validateStartDraw(config)
+    this.initDrawState(config)
+    this.createDrawStrategy(config)
+    this.emitStartEvent(config)
+  }
+
+  /**
+   * 验证开始绘制的条件
+   */
+  private validateStartDraw(config: DrawConfig): void {
     if (!this.viewer) {
       throw new Error('Cesium Viewer not initialized')
     }
@@ -40,35 +583,63 @@ export class DrawManager {
       throw new Error('Already drawing')
     }
 
+    if (!Object.values(DrawType).includes(config.type)) {
+      throw new Error(`Unsupported draw type: ${config.type}`)
+    }
+  }
+
+  /**
+   * 初始化绘制状态
+   */
+  private initDrawState(config: DrawConfig): void {
     this.drawing = true
     this.currentDrawType = config.type
     this.tempPositions = []
-
-    // 创建事件处理器
     this.handler = new Cesium.ScreenSpaceEventHandler(this.viewer.scene.canvas)
+  }
 
-    // 根据绘制类型设置事件
-    switch (config.type) {
-      case DrawType.POINT:
-        this.setupPointDraw(config)
-        break
-      case DrawType.POLYLINE:
-        this.setupPolylineDraw(config)
-        break
-      case DrawType.POLYGON:
-        this.setupPolygonDraw(config)
-        break
-      case DrawType.CIRCLE:
-        this.setupCircleDraw(config)
-        break
-      case DrawType.RECTANGLE:
-        this.setupRectangleDraw(config)
-        break
-      default:
-        throw new Error(`Unsupported draw type: ${config.type}`)
+  /**
+   * 创建绘制策略
+   */
+  private createDrawStrategy(config: DrawConfig): void {
+    const context: DrawContext = {
+      viewer: this.viewer!,
+      handler: this.handler!,
+      config,
+      tempPositions: this.tempPositions,
+      activeEntity: this.activeEntity,
+      onEntityCreated: (entity) => {
+        this.activeEntity = entity
+      },
+      onFinish: () => {
+        this.finishDraw(config)
+      }
     }
 
-    // 触发开始事件
+    const strategyFactory = this.getStrategyFactory(config.type)
+    this.currentStrategy = strategyFactory(context)
+    this.currentStrategy.setupEvents()
+  }
+
+  /**
+   * 获取策略工厂
+   */
+  private getStrategyFactory(type: DrawType): (context: DrawContext) => DrawStrategy {
+    const strategyMap: Record<DrawType, (context: DrawContext) => DrawStrategy> = {
+      [DrawType.POINT]: (ctx) => new PointDrawStrategy(ctx),
+      [DrawType.POLYLINE]: (ctx) => new PolylineDrawStrategy(ctx),
+      [DrawType.POLYGON]: (ctx) => new PolygonDrawStrategy(ctx),
+      [DrawType.CIRCLE]: (ctx) => new CircleDrawStrategy(ctx),
+      [DrawType.RECTANGLE]: (ctx) => new RectangleDrawStrategy(ctx)
+    }
+
+    return strategyMap[type]
+  }
+
+  /**
+   * 发送开始事件
+   */
+  private emitStartEvent(config: DrawConfig): void {
     this.emitEvent({
       type: 'start',
       drawType: config.type
@@ -76,418 +647,46 @@ export class DrawManager {
   }
 
   /**
-   * 设置点绘制
-   */
-  private setupPointDraw(config: DrawConfig): void {
-    if (!this.handler || !this.viewer) return
-
-    this.handler.setInputAction((click: any) => {
-      const cartesian = this.pickPosition(click.position)
-      if (!cartesian) {
-        console.error('[DrawManager] pickPosition returned null for point draw')
-        return
-      }
-
-      console.log('[DrawManager] Creating point at:', cartesian)
-
-      // 直接使用点击的位置，不修改高度，确保位置完全准确
-      this.tempPositions.push(cartesian)
-
-      // 使用原生 Primitive 绘制点
-      const pointPrimitive = this.viewer.scene.primitives.add(
-        new Cesium.PointPrimitiveCollection({
-          blendOption: Cesium.BlendOption.OPAQUE_AND_TRANSLUCENT
-        })
-      )
-      pointPrimitive.add({
-        position: cartesian,
-        pixelSize: 50,
-        color: Cesium.Color.YELLOW,
-        outlineColor: Cesium.Color.RED,
-        outlineWidth: 5,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY
-      })
-      console.log('[DrawManager] PointPrimitive added:', pointPrimitive)
-
-      // 同时也尝试 Entity 方式
-      const entity = this.viewer!.entities.add({
-        position: cartesian,
-        point: {
-          pixelSize: 50,
-          color: Cesium.Color.YELLOW,
-          outlineColor: Cesium.Color.RED,
-          outlineWidth: 5,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY
-        },
-        properties: config.properties
-      })
-      console.log('[DrawManager] Entity added:', entity)
-
-      // 使用临时实体记录（用于 finishDraw）
-      this.tempEntities.push(entity)
-      this.activeEntity = entity
-
-      this.finishDraw(config)
-    }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
-  }
-
-  /**
-   * 设置线绘制
-   */
-  private setupPolylineDraw(config: DrawConfig): void {
-    if (!this.handler || !this.viewer) return
-
-    let positions: Cesium.Cartesian3[] = []
-
-    // 点击添加点
-    this.handler.setInputAction((click: any) => {
-      const cartesian = this.pickPosition(click.position)
-      if (!cartesian) return
-
-      positions.push(cartesian)
-      this.tempPositions = positions
-
-      if (positions.length === 1) {
-        // 创建动态线
-        this.activeEntity = this.viewer!.entities.add({
-          polyline: {
-            positions: new Cesium.CallbackProperty(() => positions, false),
-            width: config.style?.line?.width || 3,
-            material: config.style?.line?.material || Cesium.Color.CYAN,
-            clampToGround: config.style?.line?.clampToGround ?? true
-          }
-        })
-      }
-    }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
-
-    // 移动更新预览
-    this.handler.setInputAction((move: any) => {
-      if (positions.length > 0) {
-        const cartesian = this.pickPosition(move.endPosition)
-        if (cartesian) {
-          const previewPositions = [...positions, cartesian]
-          if (this.activeEntity) {
-            ;(this.activeEntity.polyline as any).positions = new Cesium.CallbackProperty(() => previewPositions, false)
-          }
-        }
-      }
-    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE)
-
-    // 双击结束绘制
-    this.handler.setInputAction(() => {
-      this.finishDraw(config)
-    }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK)
-  }
-
-  /**
-   * 设置面绘制
-   */
-  private setupPolygonDraw(config: DrawConfig): void {
-    if (!this.handler || !this.viewer) return
-
-    let positions: Cesium.Cartesian3[] = []
-
-    // 点击添加点
-    this.handler.setInputAction((click: any) => {
-      const cartesian = this.pickPosition(click.position)
-      if (!cartesian) return
-
-      positions.push(cartesian)
-      this.tempPositions = positions
-
-      if (positions.length === 1) {
-        // 创建动态面
-        this.activeEntity = this.viewer!.entities.add({
-          polygon: {
-            hierarchy: new Cesium.CallbackProperty(() => {
-              return positions.length >= 3 ? new Cesium.PolygonHierarchy(positions) : null
-            }, false),
-            material: config.style?.polygon?.material || Cesium.Color.CYAN.withAlpha(0.5),
-            outline: config.style?.polygon?.outline ?? true,
-            outlineColor: config.style?.polygon?.outlineColor || Cesium.Color.CYAN,
-            outlineWidth: config.style?.polygon?.outlineWidth || 2,
-            perPositionHeight: config.style?.polygon?.perPositionHeight ?? false
-          }
-        })
-      }
-    }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
-
-    // 移动更新预览
-    this.handler.setInputAction((move: any) => {
-      if (positions.length > 0) {
-        const cartesian = this.pickPosition(move.endPosition)
-        if (cartesian) {
-          const previewPositions = [...positions, cartesian]
-          if (this.activeEntity) {
-            ;(this.activeEntity.polygon as any).hierarchy = new Cesium.CallbackProperty(() => {
-              return previewPositions.length >= 3 ? new Cesium.PolygonHierarchy(previewPositions) : null
-            }, false)
-          }
-        }
-      }
-    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE)
-
-    // 双击结束绘制
-    this.handler.setInputAction(() => {
-      this.finishDraw(config)
-    }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK)
-  }
-
-  /**
-   * 设置圆绘制
-   */
-  private setupCircleDraw(config: DrawConfig): void {
-    if (!this.handler || !this.viewer) return
-
-    let centerPosition: Cesium.Cartesian3 | null = null
-    let currentRadius = 0
-    let isDrawingCircle = false // 状态标志：是否在绘制圆
-    let clickCount = 0 // 点击计数
-
-    // 点击事件处理
-    this.handler.setInputAction((click: any) => {
-      const cartesian = this.pickPosition(click.position)
-      if (!cartesian) return
-
-      clickCount++
-      console.log('[DrawManager] Circle click count:', clickCount, 'isDrawingCircle:', isDrawingCircle)
-
-      if (clickCount === 1) {
-        // 第一次点击：设置圆心
-        centerPosition = cartesian
-        this.tempPositions = [cartesian]
-        isDrawingCircle = true
-
-        // 创建动态圆
-        this.activeEntity = this.viewer!.entities.add({
-          position: centerPosition,
-          ellipse: {
-            semiMinorAxis: new Cesium.CallbackProperty(() => currentRadius, false),
-            semiMajorAxis: new Cesium.CallbackProperty(() => currentRadius, false),
-            height: 0,
-            material: config.style?.polygon?.material || Cesium.Color.RED.withAlpha(0.6),
-            outline: config.style?.polygon?.outline ?? true,
-            outlineColor: config.style?.polygon?.outlineColor || Cesium.Color.WHITE,
-            outlineWidth: 4,
-            classificationType: Cesium.ClassificationType.TERRAIN
-          }
-        })
-
-        console.log('[DrawManager] Circle entity created, move mouse to adjust radius, click again to finish')
-      } else if (clickCount === 2 && isDrawingCircle) {
-        // 第二次点击：结束绘制
-        console.log('[DrawManager] Circle draw finished, radius:', currentRadius)
-
-        // 直接使用当前半径，确保和显示的一致
-        const finalRadius = currentRadius
-        if (this.activeEntity) {
-          ;(this.activeEntity.ellipse as any).semiMinorAxis = finalRadius
-          ;(this.activeEntity.ellipse as any).semiMajorAxis = finalRadius
-        }
-
-        // 添加圆的边界点到 positions 用于计算包围盒
-        if (centerPosition) {
-          const numPoints = 8
-          const radius = finalRadius
-          for (let i = 0; i < numPoints; i++) {
-            const angle = (i / numPoints) * 2 * Math.PI
-            const cartographic = Cesium.Cartographic.fromCartesian(centerPosition)
-            const point = Cesium.Cartesian3.fromRadians(
-              cartographic.longitude + (radius / 6378137) * Math.cos(angle),
-              cartographic.latitude + (radius / 6378137) * Math.sin(angle),
-              cartographic.height
-            )
-            this.tempPositions.push(point)
-          }
-        }
-
-        isDrawingCircle = false
-        this.finishDraw(config)
-      }
-    }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
-
-    // 移动更新半径
-    this.handler.setInputAction((move: any) => {
-      if (isDrawingCircle && centerPosition) {
-        const cartesian = this.pickPosition(move.endPosition)
-        if (cartesian) {
-          currentRadius = Cesium.Cartesian3.distance(centerPosition, cartesian)
-          console.log('[DrawManager] Circle radius:', currentRadius)
-          if (this.activeEntity) {
-            ;(this.activeEntity.ellipse as any).semiMinorAxis = currentRadius
-            ;(this.activeEntity.ellipse as any).semiMajorAxis = currentRadius
-          }
-        }
-      }
-    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE)
-  }
-
-  /**
-   * 设置矩形绘制
-   */
-  private setupRectangleDraw(config: DrawConfig): void {
-    if (!this.handler || !this.viewer) return
-
-    let startPosition: Cesium.Cartesian3 | null = null
-    let currentRectangle: Cesium.Rectangle | null = null
-    let isDrawingRect = false
-    let clickCount = 0
-
-    // 点击事件处理
-    this.handler.setInputAction((click: any) => {
-      const cartesian = this.pickPosition(click.position)
-      if (!cartesian) return
-
-      clickCount++
-      console.log('[DrawManager] Rectangle click count:', clickCount, 'isDrawingRect:', isDrawingRect)
-
-      if (clickCount === 1) {
-        // 第一次点击：设置起点
-        startPosition = cartesian
-        this.tempPositions = [cartesian]
-        isDrawingRect = true
-
-        console.log('[DrawManager] Rectangle start position set, move mouse to adjust size, click again to finish')
-      } else if (clickCount === 2 && isDrawingRect) {
-        // 第二次点击：结束绘制
-        console.log('[DrawManager] Rectangle draw finished')
-
-        // 确保位置信息被记录
-        if (startPosition && !currentRectangle) {
-          // 如果没有移动鼠标，创建一个默认大小的矩形
-          const startCartographic = Cesium.Cartographic.fromCartesian(startPosition)
-          const smallOffset = 0.001
-          currentRectangle = Cesium.Rectangle.fromCartographicArray([
-            startCartographic,
-            new Cesium.Cartographic(
-              startCartographic.longitude + smallOffset,
-              startCartographic.latitude + smallOffset
-            )
-          ])
-        }
-
-        if (currentRectangle && this.activeEntity) {
-          ;(this.activeEntity.rectangle as any).coordinates = currentRectangle
-
-          // 添加矩形的四个角点到 tempPositions 用于计算包围盒
-          const west = Cesium.Math.toDegrees(currentRectangle.west)
-          const south = Cesium.Math.toDegrees(currentRectangle.south)
-          const east = Cesium.Math.toDegrees(currentRectangle.east)
-          const north = Cesium.Math.toDegrees(currentRectangle.north)
-
-          this.tempPositions = [
-            Cesium.Cartesian3.fromDegrees(west, south),
-            Cesium.Cartesian3.fromDegrees(east, south),
-            Cesium.Cartesian3.fromDegrees(east, north),
-            Cesium.Cartesian3.fromDegrees(west, north)
-          ]
-        }
-
-        isDrawingRect = false
-        this.finishDraw(config)
-      }
-    }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
-
-    // 移动更新矩形
-    this.handler.setInputAction((move: any) => {
-      if (isDrawingRect && startPosition) {
-        const cartesian = this.pickPosition(move.endPosition)
-        if (cartesian) {
-          const startCartographic = Cesium.Cartographic.fromCartesian(startPosition)
-          const endCartographic = Cesium.Cartographic.fromCartesian(cartesian)
-
-          currentRectangle = Cesium.Rectangle.fromCartographicArray([
-            startCartographic,
-            endCartographic
-          ])
-
-          console.log('[DrawManager] Rectangle moving, rectangle:', currentRectangle)
-
-          if (!this.activeEntity && currentRectangle) {
-            this.activeEntity = this.viewer!.entities.add({
-              rectangle: {
-                coordinates: currentRectangle,
-                material: config.style?.polygon?.material || Cesium.Color.RED.withAlpha(0.6),
-                outline: config.style?.polygon?.outline ?? true,
-                outlineColor: config.style?.polygon?.outlineColor || Cesium.Color.WHITE,
-                outlineWidth: 4,
-                height: 0,
-                classificationType: Cesium.ClassificationType.TERRAIN
-              }
-            })
-          } else if (this.activeEntity && currentRectangle) {
-            ;(this.activeEntity.rectangle as any).coordinates = currentRectangle
-          }
-        }
-      }
-    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE)
-  }
-
-  /**
-   * 拾取位置
-   */
-  private pickPosition(windowPosition: Cesium.Cartesian2): Cesium.Cartesian3 | undefined {
-    if (!this.viewer) return undefined
-
-    // 尝试多种拾取方式
-    // 1. 首先尝试从场景拾取（如果有地形）
-    let cartesian = this.viewer.scene.pickPosition(windowPosition)
-
-    // 2. 如果拾取失败，使用椭球面拾取
-    if (!cartesian) {
-      cartesian = this.viewer.camera.pickEllipsoid(windowPosition, this.viewer.scene.globe.ellipsoid)
-    }
-
-    // 3. 如果还是失败，尝试从相机射线计算
-    if (!cartesian) {
-      const ray = this.viewer.camera.getPickRay(windowPosition)
-      cartesian = this.viewer.scene.globe.pick(ray!, this.viewer.scene)
-    }
-
-    return cartesian || undefined
-  }
-
-  /**
    * 结束绘制
    */
   private finishDraw(config?: DrawConfig): void {
-    if (this.activeEntity) {
-      this.emitEvent({
-        type: 'end',
-        drawType: this.currentDrawType!,
-        entity: this.activeEntity,
-        positions: this.tempPositions
-      })
+    if (!this.activeEntity) {
+      this.reset()
+      return
+    }
 
-      // 如果配置了自动定位，飞向绘制位置
-      if (config?.autoFlyTo && this.tempPositions.length > 0 && this.viewer) {
-        // 计算包围盒中心和合适的观察距离
-        let boundingSphere: Cesium.BoundingSphere
+    this.emitEvent({
+      type: 'end',
+      drawType: this.currentDrawType!,
+      entity: this.activeEntity,
+      positions: this.tempPositions
+    })
 
-        if (this.tempPositions.length === 1) {
-          // 单点（点绘制）
-          boundingSphere = new Cesium.BoundingSphere(this.tempPositions[0], 0)
-        } else {
-          // 多点（线、面、圆、矩形）
-          boundingSphere = Cesium.BoundingSphere.fromPoints(this.tempPositions)
-        }
-
-        // 计算合适的观察距离（包围盒半径的 3 倍）
-        const distance = boundingSphere.radius * 3
-        const center = boundingSphere.center
-
-        this.viewer.camera.flyToBoundingSphere(boundingSphere, {
-          offset: new Cesium.HeadingPitchRange(
-            0, // heading
-            -Cesium.Math.PI_OVER_FOUR, // pitch: 俯视 45 度
-            distance // 距离
-          ),
-          duration: 1.5
-        })
-      }
+    if (config?.autoFlyTo && this.tempPositions.length > 0 && this.viewer) {
+      this.flyToDrawing()
     }
 
     this.reset()
+  }
+
+  /**
+   * 飞向绘制位置
+   */
+  private flyToDrawing(): void {
+    let boundingSphere: Cesium.BoundingSphere
+
+    if (this.tempPositions.length === 1) {
+      boundingSphere = new Cesium.BoundingSphere(this.tempPositions[0], 0)
+    } else {
+      boundingSphere = Cesium.BoundingSphere.fromPoints(this.tempPositions)
+    }
+
+    const distance = boundingSphere.radius * 3
+
+    this.viewer!.camera.flyToBoundingSphere(boundingSphere, {
+      offset: new Cesium.HeadingPitchRange(0, -Cesium.Math.PI_OVER_FOUR, distance),
+      duration: 1.5
+    })
   }
 
   /**
@@ -506,15 +705,11 @@ export class DrawManager {
    * 重置状态
    */
   private reset(): void {
-    // 移除临时实体
-    this.tempEntities.forEach(entity => {
-      if (this.viewer) {
-        this.viewer.entities.remove(entity)
-      }
-    })
-    this.tempEntities = []
+    if (this.currentStrategy) {
+      this.currentStrategy.cleanup()
+      this.currentStrategy = null
+    }
 
-    // 移除事件处理器
     if (this.handler) {
       this.handler.destroy()
       this.handler = null

@@ -248,16 +248,10 @@ const startDraw = (type: string) => {
     }
   }
 
-  drawManager.startDraw({
-    type: drawType,
-    style,
-    autoFlyTo: true // 绘制完成后自动定位到最佳观察位置
-  })
-
   isDrawing.value = true
 
-  // 监听绘制事件
-  drawManager.on('end', (event) => {
+  // 定义事件处理函数
+  const handleEnd = (event: any) => {
     isDrawing.value = false
     hasDrawings.value = true
     emit('draw', {
@@ -265,11 +259,27 @@ const startDraw = (type: string) => {
       entity: event.entity,
       positions: event.positions
     })
-  })
+    // 移除监听器
+    drawManager.off('end', handleEnd)
+    drawManager.off('cancel', handleCancel)
+  }
 
-  drawManager.on('cancel', () => {
+  const handleCancel = () => {
     isDrawing.value = false
     ElMessage.info('绘制已取消')
+    // 移除监听器
+    drawManager.off('end', handleEnd)
+    drawManager.off('cancel', handleCancel)
+  }
+
+  // 注册事件监听器（只注册一次）
+  drawManager.on('end', handleEnd)
+  drawManager.on('cancel', handleCancel)
+
+  drawManager.startDraw({
+    type: drawType,
+    style,
+    autoFlyTo: true // 绘制完成后自动定位到最佳观察位置
   })
 }
 
