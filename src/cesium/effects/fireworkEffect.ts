@@ -1,18 +1,10 @@
 /**
- * 烟花爆炸粒子特效 - Cesium 1.138+
- * 粒子系统 + Entity Point - 节日庆典的绚丽烟花
+ * 烟花特效 - 基于 Cesium 1.138
+ * 学习 Three.js 和 Cesium 源码重新实现
+ * 使用 ParticleSystem + SphereEmitter + 自定义物理效果
  */
 
 import * as Cesium from 'cesium'
-
-/**
- * 烟花颜色配置
- */
-export interface FireworkColor {
-  coreColor: Cesium.Color // 核心颜色
-  trailColor: Cesium.Color // 拖尾颜色
-  sparkColor: Cesium.Color // 火花颜色
-}
 
 /**
  * 烟花配置
@@ -23,42 +15,39 @@ export interface FireworkOptions {
     latitude: number
     height: number
   }
-  particleCount?: number // 粒子数量
-  explosionRadius?: number // 爆炸半径
-  heightRange?: { min: number; max: number } // 高度范围
-  color?: FireworkColor // 颜色配置
-  lifetime?: number // 粒子生命周期
-  gravity?: number // 重力
+  particleCount?: number // 粒子数量 (500-2000)
+  particleSize?: number // 粒子大小 (5-15)
+  explosionRadius?: number // 爆炸半径 (米)
+  duration?: number // 持续时间（秒）
+  colors?: Cesium.Color[] // 粒子颜色数组
+  gravity?: number // 重力系数
+  drag?: number // 空气阻力
 }
 
 /**
- * 烟花粒子类
- */
-interface FireworkParticle {
-  entity: Cesium.Entity
-  position: Cesium.Cartesian3
-  velocity: Cesium.Cartesian3
-  life: number
-  maxLife: number
-  color: Cesium.Color
-}
-
-/**
- * 烟花爆炸特效类
+ * 烟花特效类
  */
 export class FireworkEffect {
   private viewer: Cesium.Viewer
-  private particles: FireworkParticle[] = []
-  private isActive: boolean = false
-  private updateInterval: number | null = null
+  private particleSystems: Cesium.ParticleSystem[] = []
 
-  // 默认配置
+  // 默认配置（性能优化版）
   private defaultOptions = {
-    particleCount: 120,
-    explosionRadius: 120,
-    heightRange: { min: 600, max: 1200 },
-    lifetime: 2.5,
-    gravity: 25.0
+    particleCount: 800, // 减少粒子数量，提升性能
+    particleSize: 5.0, // 增大粒子大小补偿视觉效果
+    explosionRadius: 100.0,
+    duration: 2.0, // 缩短持续时间
+    colors: [
+      Cesium.Color.RED.withAlpha(1.0),
+      Cesium.Color.ORANGE.withAlpha(1.0),
+      Cesium.Color.YELLOW.withAlpha(1.0),
+      Cesium.Color.LIME.withAlpha(1.0),
+      Cesium.Color.CYAN.withAlpha(1.0),
+      Cesium.Color.MAGENTA.withAlpha(1.0),
+      Cesium.Color.WHITE.withAlpha(1.0)
+    ],
+    gravity: 15.0, // 增加重力，让粒子更快下落
+    drag: 0.02 // 增加阻力，让粒子更快减速
   }
 
   constructor(viewer: Cesium.Viewer) {
@@ -66,263 +55,209 @@ export class FireworkEffect {
   }
 
   /**
-   * 预设烟花颜色方案
+   * 创建烟花爆炸效果（基于 Three.js 和 Cesium 源码优化）
    */
-  private getColorPresets(): FireworkColor[] {
-    return [
-      {
-        coreColor: Cesium.Color.fromCssColorString('#ff0000'),
-        trailColor: Cesium.Color.fromCssColorString('#ff6600'),
-        sparkColor: Cesium.Color.fromCssColorString('#ffcc00')
-      },
-      {
-        coreColor: Cesium.Color.fromCssColorString('#00ff00'),
-        trailColor: Cesium.Color.fromCssColorString('#00ff88'),
-        sparkColor: Cesium.Color.fromCssColorString('#88ff00')
-      },
-      {
-        coreColor: Cesium.Color.fromCssColorString('#0000ff'),
-        trailColor: Cesium.Color.fromCssColorString('#0088ff'),
-        sparkColor: Cesium.Color.fromCssColorString('#00ffff')
-      },
-      {
-        coreColor: Cesium.Color.fromCssColorString('#ff00ff'),
-        trailColor: Cesium.Color.fromCssColorString('#ff66ff'),
-        sparkColor: Cesium.Color.fromCssColorString('#ff00ff')
-      },
-      {
-        coreColor: Cesium.Color.fromCssColorString('#ffff00'),
-        trailColor: Cesium.Color.fromCssColorString('#ffcc00'),
-        sparkColor: Cesium.Color.fromCssColorString('#ffff88')
-      },
-      {
-        coreColor: Cesium.Color.fromCssColorString('#00ffff'),
-        trailColor: Cesium.Color.fromCssColorString('#00ffff'),
-        sparkColor: Cesium.Color.fromCssColorString('#88ffff')
-      },
-      {
-        coreColor: Cesium.Color.fromCssColorString('#ff8844'),
-        trailColor: Cesium.Color.fromCssColorString('#ffaa44'),
-        sparkColor: Cesium.Color.fromCssColorString('#ffcc88')
-      },
-      {
-        coreColor: Cesium.Color.fromCssColorString('#ffffff'),
-        trailColor: Cesium.Color.fromCssColorString('#dddddd'),
-        sparkColor: Cesium.Color.fromCssColorString('#ffffff')
-      }
-    ]
-  }
-
-  /**
-   * 创建烟花爆炸粒子
-   */
-  private createExplosionParticles(
-    position: Cesium.Cartesian3,
-    options: Required<FireworkOptions>
-  ): void {
-    const colorScheme = options.color || this.getColorPresets()[Math.floor(Math.random() * 8)]
-
-    for (let i = 0; i < options.particleCount; i++) {
-      // 球面均匀分布 - 使用斐波那契球面分布获得更好的视觉效果
-      const phi = Math.acos(1 - 2 * (i + 0.5) / options.particleCount)
-      const theta = Math.PI * (1 + Math.sqrt(5)) * (i + 0.5)
-
-      // 径向速度 - 较小的爆炸半径，更真实的速度分布
-      const speed = options.explosionRadius * (0.3 + Math.random() * 0.5)
-
-      // 计算速度向量 - 稍微向上的方向
-      const vx = speed * Math.sin(phi) * Math.cos(theta)
-      const vy = speed * Math.sin(phi) * Math.sin(theta)
-      const vz = speed * Math.cos(phi) * 0.2 + Math.random() * 30
-
-      // 随机选择颜色 - 70%核心色，20%拖尾色，10%火花色
-      const colorChoice = Math.random()
-      let particleColor = colorScheme.coreColor
-      if (colorChoice > 0.7) {
-        particleColor = colorScheme.trailColor
-      } else if (colorChoice > 0.9) {
-        particleColor = colorScheme.sparkColor
-      }
-
-      // 创建粒子实体 - 更小的粒子尺寸，更真实的视觉效果
-      const particleSize = 1.5 + Math.random() * 2.5
-      const entity = this.viewer.entities.add({
-        position: new Cesium.CallbackProperty(() => {
-          const p = this.particles.find((item) => item.entity === entity)
-          return p ? p.position : position
-        }, false),
-        point: {
-          pixelSize: particleSize,
-          color: new Cesium.CallbackProperty(() => {
-            const p = this.particles.find((item) => item.entity === entity)
-            if (!p) return particleColor.withAlpha(0)
-            const lifeRatio = p.life / p.maxLife
-            // 使用缓动函数使淡出更自然 - 保持高透明度以获得真实感
-            const easedAlpha = 1 - Math.pow(1 - lifeRatio, 2.5)
-            return p.color.withAlpha(easedAlpha)
-          }, false),
-          outlineColor: Cesium.Color.TRANSPARENT,
-          outlineWidth: 0,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY // 始终显示
-        }
-      })
-
-      this.particles.push({
-        entity,
-        position: Cesium.Cartesian3.clone(position),
-        velocity: new Cesium.Cartesian3(vx, vy, vz),
-        life: options.lifetime * (0.85 + Math.random() * 0.3),
-        maxLife: options.lifetime,
-        color: particleColor.clone()
-      })
-    }
-  }
-
-  /**
-   * 启动更新循环
-   */
-  private startUpdateLoop(): void {
-    if (this.updateInterval) {
-      return
-    }
-
-    this.updateInterval = setInterval(() => {
-      this.updateParticles(0.016) // 约60fps
-    }, 16)
-  }
-
-  /**
-   * 更新粒子物理状态
-   */
-  private updateParticles(dt: number): void {
-    const particlesToRemove: number[] = []
-
-    this.particles.forEach((p, index) => {
-      if (p.life > 0) {
-        // 重力影响 - 更强的重力使爆炸更有力
-        p.velocity.z -= this.defaultOptions.gravity * dt
-
-        // 更新位置
-        p.position.x += p.velocity.x * dt
-        p.position.y += p.velocity.y * dt
-        p.position.z += p.velocity.z * dt
-
-        // 空气阻力 - 随时间增加阻力
-        const lifeRatio = p.life / p.maxLife
-        const drag = 0.96 + lifeRatio * 0.03
-        p.velocity = Cesium.Cartesian3.multiplyByScalar(p.velocity, drag, p.velocity)
-
-        // 更新生命周期
-        p.life -= dt
-      } else {
-        particlesToRemove.push(index)
-      }
-    })
-
-    // 批量移除死亡粒子（优化性能）
-    if (particlesToRemove.length > 0) {
-      particlesToRemove.reverse().forEach((index) => {
-        const p = this.particles[index]
-        this.viewer.entities.remove(p.entity)
-        this.particles.splice(index, 1)
-      })
-    }
-
-    // 如果所有粒子都消失了，停止更新
-    if (this.particles.length === 0 && this.isActive) {
-      this.stopUpdateLoop()
-      this.isActive = false
-      console.log('[FireworkEffect] All particles cleared')
-    }
-  }
-
-  /**
-   * 停止更新循环
-   */
-  private stopUpdateLoop(): void {
-    if (this.updateInterval) {
-      clearInterval(this.updateInterval)
-      this.updateInterval = null
-    }
-  }
-
-  /**
-   * 发射烟花
-   */
-  launch(options: FireworkOptions): void {
-    // 合并配置
-    const config: Required<FireworkOptions> = {
+  create(options: FireworkOptions): void {
+    const config = {
       ...this.defaultOptions,
-      ...options,
-      color: options.color || this.getColorPresets()[Math.floor(Math.random() * 8)]
-    }
+      ...options
+    } as Required<FireworkOptions>
 
-    // 计算爆炸位置
-    const explosionHeight =
-      config.heightRange.min + Math.random() * (config.heightRange.max - config.heightRange.min)
-    const position = Cesium.Cartesian3.fromDegrees(
-      config.position.longitude,
-      config.position.latitude,
-      explosionHeight
+    const { longitude, latitude, height } = config.position
+
+    // 使用 eastNorthUpToFixedFrame 创建模型矩阵
+    const position = Cesium.Cartesian3.fromDegrees(longitude, latitude, height)
+    const modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(position)
+
+    // 随机选择颜色
+    const color = config.colors[Math.floor(Math.random() * config.colors.length)]
+
+    // 随机爆炸大小
+    const size = Cesium.Math.randomBetween(
+      config.explosionRadius * 0.7,
+      config.explosionRadius * 1.3
     )
 
-    // 创建爆炸粒子
-    this.createExplosionParticles(position, config)
+    // 创建粒子爆发（单次爆发，性能更好）
+    const bursts = [
+      new Cesium.ParticleBurst({
+        time: 0.05,
+        minimum: config.particleCount,
+        maximum: config.particleCount
+      })
+    ]
 
-    this.isActive = true
-    console.log('[FireworkEffect] Firework launched at', config.position)
+    // 计算粒子生命周期
+    const minLife = config.duration * 0.5
+    const maxLife = config.duration
 
-    // 启动更新循环
-    this.startUpdateLoop()
-  }
+    // 物理参数 scratch 对象
+    const gravityScratch = new Cesium.Cartesian3()
 
-  /**
-   * 发射多枚烟花
-   */
-  launchMultiple(count: number, centerPosition: { longitude: number; latitude: number }, options?: Partial<FireworkOptions>): void {
-    for (let i = 0; i < count; i++) {
-      // 随机偏移位置
-      const offset = 0.008 // 约800米范围
-      const lon = centerPosition.longitude + (Math.random() - 0.5) * offset
-      const lat = centerPosition.latitude + (Math.random() - 0.5) * offset
+    // 自定义物理效果（重力 + 阻力）
+    const updateCallback = (particle: any) => {
+      // 应用重力（Y轴向下）
+      gravityScratch.x = 0
+      gravityScratch.y = -config.gravity * 0.016
+      gravityScratch.z = 0
 
-      // 延迟发射 - 更长的间隔减少同时存在的粒子数量
-      setTimeout(() => {
-        this.launch({
-          position: { longitude: lon, latitude: lat, height: 0 },
-          ...options
-        })
-      }, i * 500) // 每500毫秒发射一枚
+      particle.velocity = Cesium.Cartesian3.add(
+        particle.velocity,
+        gravityScratch,
+        particle.velocity
+      )
+
+      // 应用空气阻力
+      particle.velocity = Cesium.Cartesian3.multiplyByScalar(
+        particle.velocity,
+        1.0 - config.drag,
+        particle.velocity
+      )
     }
+
+    // 创建粒子系统
+    const particleSystem = this.viewer.scene.primitives.add(
+      new Cesium.ParticleSystem({
+        // 粒子纹理
+        image: this.createGlowTexture(),
+
+        // 颜色渐变
+        startColor: Cesium.Color.clone(color),
+        endColor: color.withAlpha(0.0),
+
+        // 尺寸变化 - 先放大后缩小
+        startScale: 0.3,
+        endScale: 1.2,
+
+        // 粒子生命周期
+        minimumParticleLife: minLife,
+        maximumParticleLife: maxLife,
+
+        // 速度
+        minimumSpeed: 70.0,
+        maximumSpeed: 140.0,
+
+        // 粒子大小
+        imageSize: new Cesium.Cartesian2(config.particleSize, config.particleSize),
+
+        // 发射器
+        emitter: new Cesium.SphereEmitter(0.1),
+
+        // 发射率
+        emissionRate: 0,
+
+        // 爆发配置
+        bursts: bursts,
+
+        // 持续时间
+        lifetime: config.duration + 0.8,
+
+        // 渲染状态
+        blending: Cesium.BlendingState.ADDITIVE_BLEND,
+        depthTest: false,
+        depthWrite: false,
+
+        // 模型矩阵
+        modelMatrix: modelMatrix,
+
+        // 自定义物理
+        updateCallback: updateCallback
+      })
+    )
+
+    // 保存引用
+    this.particleSystems.push(particleSystem)
+
+    console.log('[FireworkEffect] Firework created (performance optimized)')
+    console.log('[FireworkEffect] Position:', longitude.toFixed(4), latitude.toFixed(4), height.toFixed(0))
+    console.log('[FireworkEffect] Particles:', config.particleCount)
+    console.log('[FireworkEffect] Color:', color.toString())
+  }
+
+
+
+  /**
+   * 创建高质量光晕粒子纹理（性能优化版）
+   */
+  private createGlowTexture(): HTMLCanvasElement {
+    const canvas = document.createElement('canvas')
+    canvas.width = 32
+    canvas.height = 32
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return canvas
+
+    const centerX = 16
+    const centerY = 16
+
+    // 简单径向渐变，性能更好
+    const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 16)
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)')
+    gradient.addColorStop(0.4, 'rgba(255, 255, 255, 0.4)')
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
+
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, 32, 32)
+
+    return canvas
   }
 
   /**
-   * 获取粒子数量
+   * 创建多个烟花（连发效果）
    */
-  getParticleCount(): number {
-    return this.particles.length
+  createMultiple(positions: Array<{ longitude: number; latitude: number; height: number }>, delay: number = 0.5): void {
+    positions.forEach((pos, index) => {
+      setTimeout(() => {
+        this.create({ position: pos })
+      }, index * delay * 1000)
+    })
+  }
+
+  /**
+   * 发射多个烟花（简化版）
+   * @param count 烟花数量
+   * @param basePosition 基准位置（不包含高度）
+   */
+  launchMultiple(count: number, basePosition: { longitude: number; latitude: number }): void {
+    const positions: Array<{ longitude: number; latitude: number; height: number }> = []
+    for (let i = 0; i < count; i++) {
+      positions.push({
+        longitude: basePosition.longitude + (Math.random() - 0.5) * 0.01,
+        latitude: basePosition.latitude + (Math.random() - 0.5) * 0.01,
+        height: 200 + Math.random() * 300
+      })
+    }
+    this.createMultiple(positions, 0.25) // 增加间隔，降低同时存在的烟花数量
   }
 
   /**
    * 获取是否活跃
    */
   getActive(): boolean {
-    return this.isActive
+    return this.particleSystems.length > 0
   }
 
   /**
    * 销毁特效
    */
   destroy(): void {
-    this.stopUpdateLoop()
-
-    // 移除所有粒子实体
-    this.particles.forEach((p) => {
-      this.viewer.entities.remove(p.entity)
+    // 移除并销毁所有粒子系统
+    this.particleSystems.forEach((ps) => {
+      try {
+        // 立即隐藏
+        ps.show = false
+        // 设置生命周期为0，立即停止发射新粒子
+        ps.lifetime = 0
+        // 从场景中移除
+        this.viewer.scene.primitives.remove(ps)
+      } catch (e) {
+        // 忽略已销毁的错误
+      }
     })
-    this.particles = []
 
-    this.isActive = false
-    console.log('[FireworkEffect] Firework destroyed')
+    // 清空数组
+    this.particleSystems = []
+
+    console.log('[FireworkEffect] Firework destroyed, cleared', this.particleSystems.length, 'systems')
   }
 }

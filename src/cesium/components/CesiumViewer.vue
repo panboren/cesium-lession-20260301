@@ -4,55 +4,60 @@
 
     <!-- 地图工具栏 -->
     <div class="cesium-toolbar">
-      <el-tooltip content="绘制点" placement="bottom">
-        <el-button
-          type="primary"
-          :icon="Location"
-          @click="startDraw('point')"
-          :disabled="isDrawing"
-        />
-      </el-tooltip>
+      <div class="toolbar-title">🛠️ 地图工具</div>
 
-      <el-tooltip content="绘制线" placement="bottom">
-        <el-button
-          type="primary"
-          :icon="Connection"
-          @click="startDraw('polyline')"
-          :disabled="isDrawing"
-        />
-      </el-tooltip>
+      <div class="toolbar-group">
+        <el-tooltip content="绘制点" placement="bottom">
+          <el-button
+            circle
+            :icon="Location"
+            @click="startDraw('point')"
+            :disabled="isDrawing"
+          />
+        </el-tooltip>
 
-      <el-tooltip content="绘制面" placement="bottom">
-        <el-button
-          type="primary"
-          :icon="Grid"
-          @click="startDraw('polygon')"
-          :disabled="isDrawing"
-        />
-      </el-tooltip>
+        <el-tooltip content="绘制线" placement="bottom">
+          <el-button
+            circle
+            :icon="Connection"
+            @click="startDraw('polyline')"
+            :disabled="isDrawing"
+          />
+        </el-tooltip>
 
-      <el-tooltip content="绘制圆" placement="bottom">
-        <el-button
-          type="primary"
-          :icon="CircleCheck"
-          @click="startDraw('circle')"
-          :disabled="isDrawing"
-        />
-      </el-tooltip>
+        <el-tooltip content="绘制面" placement="bottom">
+          <el-button
+            circle
+            :icon="Grid"
+            @click="startDraw('polygon')"
+            :disabled="isDrawing"
+          />
+        </el-tooltip>
 
-      <el-tooltip content="绘制矩形" placement="bottom">
-        <el-button
-          type="primary"
-          :icon="Grid"
-          @click="startDraw('rectangle')"
-          :disabled="isDrawing"
-        />
-      </el-tooltip>
+        <el-tooltip content="绘制圆" placement="bottom">
+          <el-button
+            circle
+            :icon="CircleCheck"
+            @click="startDraw('circle')"
+            :disabled="isDrawing"
+          />
+        </el-tooltip>
 
-      <el-divider direction="vertical" />
+        <el-tooltip content="绘制矩形" placement="bottom">
+          <el-button
+            circle
+            :icon="Grid"
+            @click="startDraw('rectangle')"
+            :disabled="isDrawing"
+          />
+        </el-tooltip>
+      </div>
+
+      <div class="toolbar-divider"></div>
 
       <el-tooltip content="清除绘制" placement="bottom">
         <el-button
+          circle
           type="danger"
           :icon="Delete"
           @click="clearDraw"
@@ -358,12 +363,69 @@ onBeforeUnmount(() => {
   top: 10px;
   left: 10px;
   z-index: 100;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 12px;
+
+  .toolbar-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: 0.5px;
+    padding-right: 12px;
+    border-right: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .toolbar-group {
+    display: flex;
+    gap: 8px;
+  }
+
+  .toolbar-divider {
+    width: 1px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  :deep(.el-button) {
+    background: rgba(66, 133, 244, 0.2);
+    border: 1px solid rgba(66, 133, 244, 0.4);
+    color: #4285f4;
+    transition: all 0.3s ease;
+
+    &:hover {
+      background: rgba(66, 133, 244, 0.4);
+      border-color: rgba(66, 133, 244, 0.6);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(66, 133, 244, 0.3);
+    }
+
+    &:disabled {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+      color: rgba(255, 255, 255, 0.3);
+      transform: none;
+      box-shadow: none;
+    }
+
+    &.el-button--danger {
+      background: rgba(244, 67, 54, 0.2);
+      border-color: rgba(244, 67, 54, 0.4);
+      color: #f44336;
+
+      &:hover {
+        background: rgba(244, 67, 54, 0.4);
+        border-color: rgba(244, 67, 54, 0.6);
+        box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
+      }
+    }
+  }
 }
 
 .cesium-statusbar {
@@ -371,17 +433,25 @@ onBeforeUnmount(() => {
   bottom: 10px;
   right: 10px;
   z-index: 100;
-  padding: 8px 16px;
-  background: rgba(0, 0, 0, 0.7);
-  border-radius: 4px;
-  color: white;
-  font-size: 12px;
+  padding: 10px 20px;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(10px);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
   display: flex;
   gap: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 
   .status-item {
     display: flex;
     align-items: center;
+
+    span {
+      font-family: 'Courier New', monospace;
+      letter-spacing: 0.5px;
+    }
   }
 }
 </style>
