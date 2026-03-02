@@ -7,54 +7,33 @@
     <el-collapse v-model="activeLayers" class="layer-collapse">
       <el-collapse-item name="layers">
         <template #title>
-          <div class="collapse-title">
-            <span>🗺️ 图层管理</span>
-          </div>
+          <div class="collapse-title">🗺️ 图层管理</div>
         </template>
 
         <el-tree
           :data="layerTreeData"
-          :props="{ children: 'children', label: 'label' }"
+          :props="treeProps"
           show-checkbox
           default-expand-all
           node-key="id"
           @check="handleLayerCheck"
-          class="layer-tree"
         />
       </el-collapse-item>
 
       <el-collapse-item name="styles">
         <template #title>
-          <div class="collapse-title">
-            <span>🎨 地图样式</span>
-          </div>
+          <div class="collapse-title">🎨 地图样式</div>
         </template>
 
         <el-form label-width="80px" size="small" class="layer-form">
-          <el-form-item label="亮度">
+          <el-form-item
+            v-for="styleItem in styleItems"
+            :key="styleItem.key"
+            :label="styleItem.label"
+          >
             <el-slider
-              v-model="brightness"
-              :min="0"
-              :max="3"
-              :step="0.1"
-              @change="handleStyleChange"
-            />
-          </el-form-item>
-          <el-form-item label="对比度">
-            <el-slider
-              v-model="contrast"
-              :min="0"
-              :max="3"
-              :step="0.1"
-              @change="handleStyleChange"
-            />
-          </el-form-item>
-          <el-form-item label="透明度">
-            <el-slider
-              v-model="opacity"
-              :min="0"
-              :max="1"
-              :step="0.1"
+              v-model="styleItem.model.value"
+              v-bind="styleItem.props"
               @change="handleStyleChange"
             />
           </el-form-item>
@@ -63,24 +42,29 @@
 
       <el-collapse-item name="scene">
         <template #title>
-          <div class="collapse-title">
-            <span>🌐 场景设置</span>
-          </div>
+          <div class="collapse-title">🌐 场景设置</div>
         </template>
 
         <el-form label-width="100px" size="small" class="layer-form">
           <el-form-item label="场景模式">
             <el-select v-model="sceneMode" @change="handleSceneModeChange">
-              <el-option label="3D 模式" value="SCENE3D" />
-              <el-option label="2D 模式" value="SCENE2D" />
-              <el-option label="2.5D 模式" value="COLUMBUS_VIEW" />
+              <el-option
+                v-for="modeOption in sceneModeOptions"
+                :key="modeOption.value"
+                :label="modeOption.label"
+                :value="modeOption.value"
+              />
             </el-select>
           </el-form-item>
-          <el-form-item label="显示地形">
-            <el-switch v-model="showTerrain" @change="handleTerrainChange" />
-          </el-form-item>
-          <el-form-item label="显示大气">
-            <el-switch v-model="showAtmosphere" @change="handleAtmosphereChange" />
+          <el-form-item
+            v-for="switchItem in sceneSwitchItems"
+            :key="switchItem.key"
+            :label="switchItem.label"
+          >
+            <el-switch
+              v-model="switchItem.model.value"
+              @change="switchItem.onChange"
+            />
           </el-form-item>
         </el-form>
       </el-collapse-item>
@@ -94,13 +78,57 @@ import { ElMessage } from 'element-plus'
 import { cesiumService } from '@/services/cesiumService'
 import * as Cesium from 'cesium'
 
-/**
- * 图层数据配置
- */
-const layerTreeData = ref([
+// ==================== 配置常量 ====================
+
+/** 图层配置 */
+const LAYER_CONFIG = {
+  imagery: {
+    keys: ['gaode-vector', 'gaode-satellite', 'gaode-hybrid'],
+    label: '影像图层'
+  },
+  terrain: {
+    keys: ['simple', 'custom', 'cesium-high', 'arcgis'],
+    label: '地形图层',
+    providerMap: {
+      simple: 'simple',
+      custom: 'custom',
+      'cesium-high': 'cesium-ion',
+      arcgis: 'arcgis'
+    } as const
+  }
+} as const
+
+/** 地图样式配置 */
+const STYLE_CONFIG = [
+  { key: 'brightness', label: '亮度', min: 0, max: 3, step: 0.1, default: 1 },
+  { key: 'contrast', label: '对比度', min: 0, max: 3, step: 0.1, default: 1 },
+  { key: 'opacity', label: '透明度', min: 0, max: 1, step: 0.1, default: 1 }
+] as const
+
+/** 场景模式配置 */
+const SCENE_MODE_CONFIG = [
+  { label: '3D 模式', value: 'SCENE3D' },
+  { label: '2D 模式', value: 'SCENE2D' },
+  { label: '2.5D 模式', value: 'COLUMBUS_VIEW' }
+] as const
+
+// ==================== 类型定义 ====================
+
+type LayerTreeData = {
+  id: string
+  label: string
+  children?: Array<{ id: string; label: string }>
+}
+
+type TerrainProviderType = 'simple' | 'custom' | 'cesium-ion' | 'arcgis' | 'none'
+
+// ==================== 响应式状态 ====================
+
+/** 图层数据 */
+const layerTreeData = ref<LayerTreeData[]>([
   {
     id: 'imagery-layers',
-    label: '影像图层',
+    label: LAYER_CONFIG.imagery.label,
     children: [
       { id: 'gaode-vector', label: '高德矢量地图' },
       { id: 'gaode-satellite', label: '高德卫星图' },
@@ -109,7 +137,7 @@ const layerTreeData = ref([
   },
   {
     id: 'terrain-layers',
-    label: '地形图层',
+    label: LAYER_CONFIG.terrain.label,
     children: [
       { id: 'simple', label: '简单地形' },
       { id: 'custom', label: '自定义地形（波形）' },
@@ -119,95 +147,104 @@ const layerTreeData = ref([
   }
 ])
 
+/** 激活的折叠面板 */
 const activeLayers = ref(['layers'])
-const brightness = ref(1)
-const contrast = ref(1)
-const opacity = ref(1)
+
+/** 地图样式状态 */
+const brightness = ref(STYLE_CONFIG[0].default)
+const contrast = ref(STYLE_CONFIG[1].default)
+const opacity = ref(STYLE_CONFIG[2].default)
+
+/** 场景模式状态 */
 const sceneMode = ref('SCENE3D')
 const showTerrain = ref(false)
 const showAtmosphere = ref(true)
 
-/**
- * 图层名称映射
- */
-const layerNameMap: Record<string, string> = {
-  'gaode-vector': '高德矢量地图',
-  'gaode-satellite': '高德卫星图',
-  'gaode-hybrid': '高德混合图',
-  simple: '简单地形',
-  custom: '自定义地形（波形）',
-  'cesium-high': 'Cesium Ion 高精度地形',
-  arcgis: 'ArcGIS 地形'
-}
+// ==================== UI 配置数组 ====================
 
-/**
- * 场景模式映射
- */
-const sceneModeMap: Record<string, Cesium.SceneMode> = {
-  SCENE3D: Cesium.SceneMode.SCENE3D,
-  SCENE2D: Cesium.SceneMode.SCENE2D,
-  COLUMBUS_VIEW: Cesium.SceneMode.COLUMBUS_VIEW
-}
+/** 树组件属性 */
+const treeProps = { children: 'children', label: 'label' }
 
-/**
- * 获取图层名称
- */
+/** 地图样式滑块配置 */
+const styleItems = STYLE_CONFIG.map((item) => ({
+  key: item.key,
+  label: item.label,
+  model: {
+    brightness,
+    contrast,
+    opacity
+  }[item.key],
+  props: {
+    min: item.min,
+    max: item.max,
+    step: item.step
+  }
+}))
+
+/** 场景模式选项 */
+const sceneModeOptions = SCENE_MODE_CONFIG
+
+// ==================== 辅助函数 ====================
+
+/** 获取图层名称 */
 const getLayerName = (id: string): string => {
-  return layerNameMap[id] || id
+  const nameMap: Record<string, string> = {
+    'gaode-vector': '高德矢量地图',
+    'gaode-satellite': '高德卫星图',
+    'gaode-hybrid': '高德混合图',
+    simple: '简单地形',
+    custom: '自定义地形（波形）',
+    'cesium-high': 'Cesium Ion 高精度地形',
+    arcgis: 'ArcGIS 地形'
+  }
+  return nameMap[id] || id
 }
 
-/**
- * 图层选择处理
- */
-const handleLayerCheck = (data: any, checked: any) => {
-  const checkedKeys = checked.checkedKeys
-
-  // 影像图层切换（单选逻辑）
-  const imageryProviders = ['gaode-vector', 'gaode-satellite', 'gaode-hybrid']
-  const selectedImagery = imageryProviders.find((key) => checkedKeys.includes(key))
-
+/** 切换影像图层 */
+const switchImageryLayer = (selectedImagery: string) => {
   if (selectedImagery) {
     cesiumService.setImageryProvider(selectedImagery)
     ElMessage.success(`已切换到 ${getLayerName(selectedImagery)}`)
   }
-
-  // 地形图层切换（单选逻辑）
-  const terrainProviders = ['simple', 'custom', 'cesium-high', 'arcgis']
-  const selectedTerrain = terrainProviders.find((key) => checkedKeys.includes(key))
-
-  if (selectedTerrain === 'simple') {
-    showTerrain.value = true
-    cesiumService
-      .setTerrainProvider('simple')
-      .then(() => ElMessage.success('已切换到简单地形'))
-      .catch(() => ElMessage.error('简单地形加载失败'))
-  } else if (selectedTerrain === 'custom') {
-    showTerrain.value = true
-    cesiumService
-      .setTerrainProvider('custom')
-      .then(() => ElMessage.success('已切换到自定义地形'))
-      .catch(() => ElMessage.error('自定义地形加载失败'))
-  } else if (selectedTerrain === 'cesium-high') {
-    showTerrain.value = true
-    cesiumService
-      .setTerrainProvider('cesium-ion')
-      .then(() => ElMessage.success('已切换到 Cesium Ion 高精度地形'))
-      .catch(() => ElMessage.error('Cesium Ion 地形加载失败'))
-  } else if (selectedTerrain === 'arcgis') {
-    showTerrain.value = true
-    cesiumService
-      .setTerrainProvider('arcgis')
-      .then(() => ElMessage.success('已切换到 ArcGIS 地形'))
-      .catch(() => ElMessage.error('ArcGIS 地形加载失败'))
-  } else {
-    showTerrain.value = false
-    cesiumService.setTerrainProvider('none')
-  }
 }
 
-/**
- * 地图样式变化
- */
+/** 切换地形图层 */
+const switchTerrainLayer = (selectedTerrain: string) => {
+  if (!selectedTerrain) {
+    showTerrain.value = false
+    cesiumService.setTerrainProvider('none')
+    return
+  }
+
+  const providerKey = LAYER_CONFIG.terrain.providerMap[selectedTerrain as keyof typeof LAYER_CONFIG.terrain.providerMap] as TerrainProviderType
+  showTerrain.value = true
+
+  cesiumService
+    .setTerrainProvider(providerKey)
+    .then(() => ElMessage.success(`已切换到 ${getLayerName(selectedTerrain)}`))
+    .catch(() => ElMessage.error(`${getLayerName(selectedTerrain)}加载失败`))
+}
+
+// ==================== 事件处理函数 ====================
+
+/** 图层选择处理 */
+const handleLayerCheck = (_data: any, checked: any) => {
+  const checkedKeys = checked.checkedKeys as string[]
+
+  // 处理影像图层
+  const selectedImagery = LAYER_CONFIG.imagery.keys.find((key) =>
+    checkedKeys.includes(key)
+  )
+  switchImageryLayer(selectedImagery || '')
+
+  // 处理地形图层
+  const selectedTerrain = LAYER_CONFIG.terrain.keys.find((key) =>
+    checkedKeys.includes(key)
+  )
+  switchTerrainLayer(selectedTerrain || '')
+}
+
+/** 地图样式变化 */
 const handleStyleChange = () => {
   cesiumService.setMapStyle({
     brightness: brightness.value,
@@ -216,28 +253,35 @@ const handleStyleChange = () => {
   })
 }
 
-/**
- * 场景模式变化
- */
+/** 场景模式变化 */
 const handleSceneModeChange = (mode: string) => {
-  cesiumService.setSceneMode(sceneModeMap[mode])
+  const modeMap: Record<string, Cesium.SceneMode> = {
+    SCENE3D: Cesium.SceneMode.SCENE3D,
+    SCENE2D: Cesium.SceneMode.SCENE2D,
+    COLUMBUS_VIEW: Cesium.SceneMode.COLUMBUS_VIEW
+  }
+  cesiumService.setSceneMode(modeMap[mode])
 }
 
-/**
- * 地形显示变化
- */
+/** 地形显示变化 */
 const handleTerrainChange = async (show: boolean) => {
   await cesiumService.setTerrain(show)
   ElMessage.success(show ? '地形已开启' : '地形已关闭')
 }
 
-/**
- * 大气显示变化
- */
+/** 大气显示变化 */
 const handleAtmosphereChange = (show: boolean) => {
   cesiumService.setAtmosphere(show)
   ElMessage.success(show ? '大气已开启' : '大气已关闭')
 }
+
+// ==================== UI 配置数组 ====================
+
+/** 场景开关配置（放在函数定义之后） */
+const sceneSwitchItems = [
+  { key: 'terrain', label: '显示地形', model: showTerrain, onChange: handleTerrainChange },
+  { key: 'atmosphere', label: '显示大气', model: showAtmosphere, onChange: handleAtmosphereChange }
+]
 </script>
 
 <style scoped lang="scss">
