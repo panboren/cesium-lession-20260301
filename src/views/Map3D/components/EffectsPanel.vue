@@ -104,7 +104,8 @@ import {
   FireworkEffect,
   FountainEffect,
   FountainType,
-  WaterSurfaceEffect
+  WaterSurfaceEffect,
+  SmokeEffect
 } from '@/cesium/effects'
 import {
   setEffectTheme,
@@ -140,6 +141,7 @@ const showWeather = ref(false)
 const showFirework = ref(false)
 const showFountain = ref(false)
 const showWaterSurface = ref(false)
+const showSmoke = ref(false)
 
 /**
  * 主题选项配置
@@ -671,14 +673,16 @@ const handleFountainChange = (show: boolean) => {
 
     effectsManager.addEffect('fountain', fountainEffect)
 
+    const cameraPosition = Cesium.Cartesian3.fromDegrees(116.3922274-0.0007100000000122009, 39.906301-0.006495999999998503, 200)
+
     viewer.camera.flyTo({
-      destination: Cesium.Cartesian3.fromDegrees(116.3920274, 39.907801, 150),
+      destination: cameraPosition,
       orientation: {
-        heading: Cesium.Math.toRadians(0),
-        pitch: Cesium.Math.toRadians(-20),
+        heading: 0,
+        pitch: 0,
         roll: 0
       },
-      duration: 2
+      duration: 2,
     })
 
     ElMessage.success('喷泉特效已开启')
@@ -722,10 +726,10 @@ const handleWaterSurfaceChange = (show: boolean) => {
     effectsManager.addEffect('waterSurface', waterSurfaceEffect)
 
     viewer.camera.flyTo({
-      destination: Cesium.Cartesian3.fromDegrees(116.3920274, 39.907801, 800),
+      destination: Cesium.Cartesian3.fromDegrees(116.392159, 39.887812, 1200),
       orientation: {
         heading: Cesium.Math.toRadians(0),
-        pitch: Cesium.Math.toRadians(-45),
+        pitch: Cesium.Math.toRadians(-40),
         roll: 0
       },
       duration: 2
@@ -735,6 +739,85 @@ const handleWaterSurfaceChange = (show: boolean) => {
   } else {
     effectsManager.removeEffect('waterSurface')
     ElMessage.success('真实水面特效已关闭')
+  }
+}
+
+/**
+ * 烟雾特效切换
+ */
+const handleSmokeChange = (show: boolean) => {
+  showSmoke.value = show
+  const manager = getCesiumManager()
+  if (!manager) return
+
+  if (show) {
+    const viewer = manager.getViewer()
+    if (!viewer) return
+
+    const smokeEffect = new SmokeEffect(viewer)
+
+    // 添加多个烟雾发射器，模拟不同位置的烟雾源
+    smokeEffect.addEmitter({
+      id: 'smoke1',
+      position: {
+        longitude: 116.39,
+        latitude: 39.9,
+        height: 50
+      },
+      emissionRate: 50, // 每秒发射50个粒子
+      particleSize: 8.0,
+      minimumParticleLife: 6.0,
+      maximumParticleLife: 10.0,
+      minimumSpeed: 2.0,
+      maximumSpeed: 5.0,
+      startOpacity: 0.7,
+      endOpacity: 0.0,
+      colorStart: Cesium.Color.fromCssColorString('#888888'),
+      colorEnd: Cesium.Color.fromCssColorString('#444444'),
+      windSpeed: 2.0,
+      windDirection: 45,
+      riseSpeed: 8.0
+    })
+
+    smokeEffect.addEmitter({
+      id: 'smoke2',
+      position: {
+        longitude: 116.392,
+        latitude: 39.902,
+        height: 50
+      },
+      emissionRate: 40,
+      particleSize: 6.0,
+      minimumParticleLife: 5.0,
+      maximumParticleLife: 8.0,
+      minimumSpeed: 1.5,
+      maximumSpeed: 4.0,
+      startOpacity: 0.6,
+      endOpacity: 0.0,
+      colorStart: Cesium.Color.fromCssColorString('#666666'),
+      colorEnd: Cesium.Color.fromCssColorString('#333333'),
+      windSpeed: 1.5,
+      windDirection: 60,
+      riseSpeed: 6.0
+    })
+
+    smokeEffect.create()
+    effectsManager.addEffect('smoke', smokeEffect)
+
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(116.371991, 39.990869, 800),
+      orientation: {
+        heading: Cesium.Math.toRadians(45),
+        pitch: Cesium.Math.toRadians(-25),
+        roll: 0
+      },
+      duration: 2
+    })
+
+    ElMessage.success('烟雾特效已开启')
+  } else {
+    effectsManager.removeEffect('smoke')
+    ElMessage.success('烟雾特效已关闭')
   }
 }
 
@@ -750,7 +833,8 @@ const effectItems = [
   { key: 'weather', label: '雨雪天气', model: showWeather, onChange: handleWeatherChange },
   { key: 'firework', label: '烟花庆典', model: showFirework, onChange: handleFireworkChange },
   { key: 'fountain', label: '喷泉/水流', model: showFountain, onChange: handleFountainChange },
-  { key: 'waterSurface', label: '真实水面', model: showWaterSurface, onChange: handleWaterSurfaceChange }
+  { key: 'waterSurface', label: '真实水面', model: showWaterSurface, onChange: handleWaterSurfaceChange },
+  { key: 'smoke', label: '烟雾特效', model: showSmoke, onChange: handleSmokeChange }
 ]
 
 /**
