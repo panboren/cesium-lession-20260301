@@ -106,8 +106,8 @@ export class SmokeEffect {
         endColor: emitter.colorEnd.withAlpha(emitter.endOpacity),
 
         // 尺寸
-        startScale: 1.0,
-        endScale: 5.0,
+        startScale: 2.0,
+        endScale: 8.0,
 
         // 生命周期
         minimumParticleLife: emitter.minimumParticleLife,
@@ -119,9 +119,10 @@ export class SmokeEffect {
 
         // 粒子大小
         imageSize: new Cesium.Cartesian2(emitter.particleSize, emitter.particleSize),
+        sizeInMeters: false, // 使用像素单位
 
-        // 发射器
-        emitter: new Cesium.CircleEmitter(emitter.particleSize * 2),
+        // 发射器 - 使用圆形发射器
+        emitter: new Cesium.CircleEmitter(5.0),
 
         // 发射率
         emissionRate: emitter.emissionRate,
@@ -153,27 +154,38 @@ export class SmokeEffect {
    */
   private createSmokeTexture(): HTMLCanvasElement {
     const canvas = document.createElement('canvas')
-    canvas.width = 64
-    canvas.height = 64
+    canvas.width = 128
+    canvas.height = 128
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return canvas
 
-    const centerX = 32
-    const centerY = 32
+    const centerX = 64
+    const centerY = 64
 
-    // 创建多层渐变，模拟烟雾的柔和效果
-    for (let i = 0; i < 5; i++) {
-      const radius = 28 - i * 4
-      const alpha = 0.15 - i * 0.02
-      const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius)
-      gradient.addColorStop(0, `rgba(255, 255, 255, ${alpha})`)
-      gradient.addColorStop(0.5, `rgba(255, 255, 255, ${alpha * 0.5})`)
+    // 清除背景
+    ctx.clearRect(0, 0, 128, 128)
+
+    // 创建柔和的烟雾纹理 - 使用多层径向渐变
+    const layers = [
+      { radius: 60, alpha: 0.08 },
+      { radius: 50, alpha: 0.10 },
+      { radius: 40, alpha: 0.12 },
+      { radius: 30, alpha: 0.15 },
+      { radius: 20, alpha: 0.18 },
+      { radius: 10, alpha: 0.20 }
+    ]
+
+    layers.forEach((layer) => {
+      const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, layer.radius)
+      gradient.addColorStop(0, `rgba(255, 255, 255, ${layer.alpha})`)
+      gradient.addColorStop(0.3, `rgba(255, 255, 255, ${layer.alpha * 0.7})`)
+      gradient.addColorStop(0.7, `rgba(255, 255, 255, ${layer.alpha * 0.3})`)
       gradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
 
       ctx.fillStyle = gradient
-      ctx.fillRect(0, 0, 64, 64)
-    }
+      ctx.fillRect(0, 0, 128, 128)
+    })
 
     return canvas
   }

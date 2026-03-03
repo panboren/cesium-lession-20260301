@@ -14,6 +14,7 @@ export { FireworkEffect } from './fireworkEffect'
 export { FountainEffect, FountainType } from './fountainEffect'
 export { WaterSurfaceEffect } from './waterSurfaceEffect'
 export { SmokeEffect } from './smokeEffect'
+export { ExplosionEffect } from './explosionEffect'
 export type {
   WindField,
   RainOptions,
@@ -33,3 +34,6 @@ export type {
 export type {
   SmokeEmitter
 } from './smokeEffect'
+export type {
+  ExplosionOptions
+} from './explosionEffect'

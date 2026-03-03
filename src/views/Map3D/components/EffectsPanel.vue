@@ -105,7 +105,8 @@ import {
   FountainEffect,
   FountainType,
   WaterSurfaceEffect,
-  SmokeEffect
+  SmokeEffect,
+  ExplosionEffect
 } from '@/cesium/effects'
 import {
   setEffectTheme,
@@ -142,6 +143,7 @@ const showFirework = ref(false)
 const showFountain = ref(false)
 const showWaterSurface = ref(false)
 const showSmoke = ref(false)
+const showExplosion = ref(false)
 
 /**
  * 主题选项配置
@@ -756,59 +758,37 @@ const handleSmokeChange = (show: boolean) => {
 
     const smokeEffect = new SmokeEffect(viewer)
 
-    // 添加多个烟雾发射器，模拟不同位置的烟雾源
+    // 添加多个烟雾发射器
     smokeEffect.addEmitter({
       id: 'smoke1',
       position: {
-        longitude: 116.39,
-        latitude: 39.9,
-        height: 50
+        longitude: 116.3920274,
+        latitude: 39.907801,
+        height: 100
       },
-      emissionRate: 50, // 每秒发射50个粒子
-      particleSize: 8.0,
-      minimumParticleLife: 6.0,
-      maximumParticleLife: 10.0,
-      minimumSpeed: 2.0,
-      maximumSpeed: 5.0,
-      startOpacity: 0.7,
+      emissionRate: 15,
+      particleSize: 12.0,
+      minimumParticleLife: 4.0,
+      maximumParticleLife: 8.0,
+      minimumSpeed: 1.0,
+      maximumSpeed: 3.0,
+      startOpacity: 0.6,
       endOpacity: 0.0,
       colorStart: Cesium.Color.fromCssColorString('#888888'),
       colorEnd: Cesium.Color.fromCssColorString('#444444'),
-      windSpeed: 2.0,
-      windDirection: 45,
-      riseSpeed: 8.0
-    })
-
-    smokeEffect.addEmitter({
-      id: 'smoke2',
-      position: {
-        longitude: 116.392,
-        latitude: 39.902,
-        height: 50
-      },
-      emissionRate: 40,
-      particleSize: 6.0,
-      minimumParticleLife: 5.0,
-      maximumParticleLife: 8.0,
-      minimumSpeed: 1.5,
-      maximumSpeed: 4.0,
-      startOpacity: 0.6,
-      endOpacity: 0.0,
-      colorStart: Cesium.Color.fromCssColorString('#666666'),
-      colorEnd: Cesium.Color.fromCssColorString('#333333'),
       windSpeed: 1.5,
-      windDirection: 60,
-      riseSpeed: 6.0
+      windDirection: 45,
+      riseSpeed: 5.0
     })
 
     smokeEffect.create()
     effectsManager.addEffect('smoke', smokeEffect)
 
     viewer.camera.flyTo({
-      destination: Cesium.Cartesian3.fromDegrees(116.371991, 39.990869, 800),
+      destination: Cesium.Cartesian3.fromDegrees(116.3920274, 39.907801, 600),
       orientation: {
         heading: Cesium.Math.toRadians(45),
-        pitch: Cesium.Math.toRadians(-25),
+        pitch: Cesium.Math.toRadians(-30),
         roll: 0
       },
       duration: 2
@@ -818,6 +798,60 @@ const handleSmokeChange = (show: boolean) => {
   } else {
     effectsManager.removeEffect('smoke')
     ElMessage.success('烟雾特效已关闭')
+  }
+}
+
+/**
+ * 爆炸特效切换
+ */
+const handleExplosionChange = (show: boolean) => {
+  showExplosion.value = show
+  const manager = getCesiumManager()
+  if (!manager) return
+
+  if (show) {
+    const viewer = manager.getViewer()
+    if (!viewer) return
+
+    const explosionEffect = new ExplosionEffect(viewer)
+
+    // 优化后的爆炸参数
+    explosionEffect.create({
+      longitude: 116.3920274,
+      latitude: 39.907801,
+      height: 100,
+      emissionRate: 3,
+      minimumParticleLife: 0.8,
+      maximumParticleLife: 3.0,
+      minimumSpeed: 2.0,
+      maximumSpeed: 6.0,
+      startScale: 0.0,
+      endScale: 8.0,
+      particleSize: 40.0,
+      startColor: Cesium.Color.fromCssColorString('#ff6600').withAlpha(0.9),
+      endColor: Cesium.Color.fromCssColorString('#ffcc00').withAlpha(0.1),
+      gravity: -2.0,
+      lifetime: 10.0,
+      emitterRadius: 3.0,
+      sizeInMeters: false
+    })
+
+    effectsManager.addEffect('explosion', explosionEffect)
+
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(116.3920274-0.000158, 39.907801-0.011494, 1500),
+      orientation: {
+        heading: Cesium.Math.toRadians(0),
+        pitch: Cesium.Math.toRadians(-45),
+        roll: 0
+      },
+      duration: 2
+    })
+
+    ElMessage.success('爆炸特效已开启')
+  } else {
+    effectsManager.removeEffect('explosion')
+    ElMessage.success('爆炸特效已关闭')
   }
 }
 
@@ -834,7 +868,8 @@ const effectItems = [
   { key: 'firework', label: '烟花庆典', model: showFirework, onChange: handleFireworkChange },
   { key: 'fountain', label: '喷泉/水流', model: showFountain, onChange: handleFountainChange },
   { key: 'waterSurface', label: '真实水面', model: showWaterSurface, onChange: handleWaterSurfaceChange },
-  { key: 'smoke', label: '烟雾特效', model: showSmoke, onChange: handleSmokeChange }
+  { key: 'smoke', label: '烟雾特效', model: showSmoke, onChange: handleSmokeChange },
+  { key: 'explosion', label: '爆炸特效', model: showExplosion, onChange: handleExplosionChange }
 ]
 
 /**
