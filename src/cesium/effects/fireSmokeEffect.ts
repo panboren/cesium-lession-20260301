@@ -301,21 +301,43 @@ export class FireSmokeEffect {
    * 销毁特效
    */
   destroy(): void {
+    let removedCount = 0
+
     if (this.fireSystem) {
-      this.viewer.scene.primitives.remove(this.fireSystem)
+      try {
+        this.fireSystem.show = false
+        this.fireSystem.lifetime = 0
+        this.fireSystem.bursts = []
+        this.viewer.scene.primitives.remove(this.fireSystem)
+        removedCount++
+      } catch (e) {
+        console.warn('[FireSmokeEffect] Error removing fire system:', e)
+      }
       this.fireSystem = null
     }
     if (this.smokeSystem) {
-      this.viewer.scene.primitives.remove(this.smokeSystem)
+      try {
+        this.smokeSystem.show = false
+        this.smokeSystem.lifetime = 0
+        this.smokeSystem.bursts = []
+        this.viewer.scene.primitives.remove(this.smokeSystem)
+        removedCount++
+      } catch (e) {
+        console.warn('[FireSmokeEffect] Error removing smoke system:', e)
+      }
       this.smokeSystem = null
     }
     if (this.fireEntity) {
-      this.viewer.entities.remove(this.fireEntity)
+      try {
+        this.viewer.entities.remove(this.fireEntity)
+      } catch (e) {
+        console.warn('[FireSmokeEffect] Error removing fire entity:', e)
+      }
       this.fireEntity = null
     }
     this.smokeEntity = null
 
-    console.log('[FireSmokeEffect] Fire and smoke destroyed')
+    console.log(`[FireSmokeEffect] Fire and smoke destroyed, removed ${removedCount} system(s)`)
   }
 
   /**

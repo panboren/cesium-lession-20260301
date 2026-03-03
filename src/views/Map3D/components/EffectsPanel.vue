@@ -106,7 +106,13 @@ import {
   FountainType,
   WaterSurfaceEffect
 } from '@/cesium/effects'
-import { setEffectTheme } from '@/cesium/materials/customMaterials'
+import {
+  setEffectTheme,
+  effectThemes as customEffectThemes,
+  onThemeChange,
+  updateEntityMaterialColors,
+  offThemeChange
+} from '@/cesium/materials/customMaterials'
 import * as Cesium from 'cesium'
 
 // 定义 props
@@ -152,107 +158,66 @@ const themeOptions = [
 let fireworkInterval: number | null = null
 
 /**
- * 特效主题定义
- */
-const effectThemes: Record<string, any> = {
-  cyan: {
-    color: Cesium.Color.CYAN,
-    scanColor: Cesium.Color.fromCssColorString('#00ffff'),
-    ringColor: Cesium.Color.fromCssColorString('#00cccc'),
-    beamColor: Cesium.Color.fromCssColorString('#00ffff'),
-    centerColor: Cesium.Color.fromCssColorString('#00ffff'),
-    waveColor: Cesium.Color.fromCssColorString('#00d9ff'),
-    headColor: Cesium.Color.fromCssColorString('#00ffff'),
-    fireColor: Cesium.Color.fromCssColorString('#00ffff'),
-    smokeColor: Cesium.Color.fromCssColorString('#808080'),
-    rainColor: Cesium.Color.fromCssColorString('#aaddff'),
-    snowColor: Cesium.Color.fromCssColorString('#e0f0ff')
-  },
-  'purple-blue': {
-    color: Cesium.Color.fromCssColorString('#07329f'),
-    scanColor: Cesium.Color.fromCssColorString('#550598'),
-    ringColor: Cesium.Color.fromCssColorString('#550598'),
-    beamColor: Cesium.Color.fromCssColorString('#550598'),
-    centerColor: Cesium.Color.fromCssColorString('#550598'),
-    waveColor: Cesium.Color.fromCssColorString('#550598'),
-    headColor: Cesium.Color.fromCssColorString('#550598'),
-    fireColor: Cesium.Color.fromCssColorString('#550598'),
-    smokeColor: Cesium.Color.fromCssColorString('#808080'),
-    rainColor: Cesium.Color.fromCssColorString('#7788ee'),
-    snowColor: Cesium.Color.fromCssColorString('#ddeeff')
-  },
-  'neon-cyber': {
-    color: Cesium.Color.fromCssColorString('#ff00ff'),
-    scanColor: Cesium.Color.fromCssColorString('#00ffff'),
-    ringColor: Cesium.Color.fromCssColorString('#ff00aa'),
-    beamColor: Cesium.Color.fromCssColorString('#00ffff'),
-    centerColor: Cesium.Color.fromCssColorString('#ff00ff'),
-    waveColor: Cesium.Color.fromCssColorString('#00ffff'),
-    headColor: Cesium.Color.fromCssColorString('#00ffff'),
-    fireColor: Cesium.Color.fromCssColorString('#ff00ff'),
-    smokeColor: Cesium.Color.fromCssColorString('#808080'),
-    rainColor: Cesium.Color.fromCssColorString('#ff66ff'),
-    snowColor: Cesium.Color.fromCssColorString('#ffe0ff')
-  },
-  'golden-future': {
-    color: Cesium.Color.fromCssColorString('#ff6b00'),
-    scanColor: Cesium.Color.fromCssColorString('#ffd700'),
-    ringColor: Cesium.Color.fromCssColorString('#ff8c00'),
-    beamColor: Cesium.Color.fromCssColorString('#ffd700'),
-    centerColor: Cesium.Color.fromCssColorString('#ffd700'),
-    waveColor: Cesium.Color.fromCssColorString('#ffa500'),
-    headColor: Cesium.Color.fromCssColorString('#ffd700'),
-    fireColor: Cesium.Color.fromCssColorString('#ffd700'),
-    smokeColor: Cesium.Color.fromCssColorString('#808080'),
-    rainColor: Cesium.Color.fromCssColorString('#ffcc88'),
-    snowColor: Cesium.Color.fromCssColorString('#ffeecc')
-  },
-  aurora: {
-    color: Cesium.Color.fromCssColorString('#00ff88'),
-    scanColor: Cesium.Color.fromCssColorString('#00ffff'),
-    ringColor: Cesium.Color.fromCssColorString('#00ffcc'),
-    beamColor: Cesium.Color.fromCssColorString('#88ff00'),
-    centerColor: Cesium.Color.fromCssColorString('#00ffff'),
-    waveColor: Cesium.Color.fromCssColorString('#00ff88'),
-    headColor: Cesium.Color.fromCssColorString('#00ffff'),
-    fireColor: Cesium.Color.fromCssColorString('#00ff88'),
-    smokeColor: Cesium.Color.fromCssColorString('#808080'),
-    rainColor: Cesium.Color.fromCssColorString('#88ffcc'),
-    snowColor: Cesium.Color.fromCssColorString('#ccffee')
-  },
-  quantum: {
-    color: Cesium.Color.fromCssColorString('#8a2be2'),
-    scanColor: Cesium.Color.fromCssColorString('#00bfff'),
-    ringColor: Cesium.Color.fromCssColorString('#9932cc'),
-    beamColor: Cesium.Color.fromCssColorString('#00bfff'),
-    centerColor: Cesium.Color.fromCssColorString('#00bfff'),
-    waveColor: Cesium.Color.fromCssColorString('#9370db'),
-    headColor: Cesium.Color.fromCssColorString('#00bfff'),
-    fireColor: Cesium.Color.fromCssColorString('#8a2be2'),
-    smokeColor: Cesium.Color.fromCssColorString('#808080'),
-    rainColor: Cesium.Color.fromCssColorString('#9966dd'),
-    snowColor: Cesium.Color.fromCssColorString('#ddccff')
-  },
-  fire: {
-    fireColor: Cesium.Color.fromCssColorString('#ff4500'),
-    smokeColor: Cesium.Color.fromCssColorString('#808080'),
-    color: Cesium.Color.fromCssColorString('#ff4500'),
-    scanColor: Cesium.Color.fromCssColorString('#ff4500'),
-    ringColor: Cesium.Color.fromCssColorString('#ff6600'),
-    beamColor: Cesium.Color.fromCssColorString('#ff4500'),
-    centerColor: Cesium.Color.fromCssColorString('#ffcc00'),
-    waveColor: Cesium.Color.fromCssColorString('#ff4500'),
-    headColor: Cesium.Color.fromCssColorString('#ffcc00'),
-    rainColor: Cesium.Color.fromCssColorString('#ffaa66'),
-    snowColor: Cesium.Color.fromCssColorString('#ffddcc')
-  }
-}
-
-/**
- * 获取当前主题颜色
+ * 获取当前主题颜色（扩展以支持 fire 主题）
  */
 const getCurrentThemeColors = () => {
-  return effectThemes[theme.value] || effectThemes.cyan
+  const baseTheme = customEffectThemes[theme.value as keyof typeof customEffectThemes] || customEffectThemes.cyan
+
+  // 如果是 fire 主题，添加额外颜色
+  if (theme.value === 'fire') {
+    return {
+      ...baseTheme,
+      fireColor: Cesium.Color.fromCssColorString('#ff4500'),
+      smokeColor: Cesium.Color.fromCssColorString('#808080'),
+      rainColor: Cesium.Color.fromCssColorString('#ffaa66'),
+      snowColor: Cesium.Color.fromCssColorString('#ffddcc')
+    }
+  }
+
+  // 为其他主题添加天气相关颜色
+  const weatherColors: Record<string, any> = {
+    cyan: {
+      fireColor: Cesium.Color.fromCssColorString('#00ffff'),
+      smokeColor: Cesium.Color.fromCssColorString('#808080'),
+      rainColor: Cesium.Color.fromCssColorString('#aaddff'),
+      snowColor: Cesium.Color.fromCssColorString('#e0f0ff')
+    },
+    'purple-blue': {
+      fireColor: Cesium.Color.fromCssColorString('#550598'),
+      smokeColor: Cesium.Color.fromCssColorString('#808080'),
+      rainColor: Cesium.Color.fromCssColorString('#7788ee'),
+      snowColor: Cesium.Color.fromCssColorString('#ddeeff')
+    },
+    'neon-cyber': {
+      fireColor: Cesium.Color.fromCssColorString('#ff00ff'),
+      smokeColor: Cesium.Color.fromCssColorString('#808080'),
+      rainColor: Cesium.Color.fromCssColorString('#ff66ff'),
+      snowColor: Cesium.Color.fromCssColorString('#ffe0ff')
+    },
+    'golden-future': {
+      fireColor: Cesium.Color.fromCssColorString('#ffd700'),
+      smokeColor: Cesium.Color.fromCssColorString('#808080'),
+      rainColor: Cesium.Color.fromCssColorString('#ffcc88'),
+      snowColor: Cesium.Color.fromCssColorString('#ffeecc')
+    },
+    aurora: {
+      fireColor: Cesium.Color.fromCssColorString('#00ff88'),
+      smokeColor: Cesium.Color.fromCssColorString('#808080'),
+      rainColor: Cesium.Color.fromCssColorString('#88ffcc'),
+      snowColor: Cesium.Color.fromCssColorString('#ccffee')
+    },
+    quantum: {
+      fireColor: Cesium.Color.fromCssColorString('#8a2be2'),
+      smokeColor: Cesium.Color.fromCssColorString('#808080'),
+      rainColor: Cesium.Color.fromCssColorString('#9966dd'),
+      snowColor: Cesium.Color.fromCssColorString('#ddccff')
+    }
+  }
+
+  return {
+    ...baseTheme,
+    ...(weatherColors[theme.value] || weatherColors.cyan)
+  }
 }
 
 /**
@@ -265,6 +230,16 @@ const handleThemeChange = () => {
 
   // 设置材质主题
   setEffectTheme(theme.value as any)
+
+  // 获取 Viewer 并更新实体材质颜色
+  const manager = getCesiumManager()
+  if (manager) {
+    const viewer = manager.getViewer()
+    if (viewer) {
+      const colors = getCurrentThemeColors()
+      updateEntityMaterialColors(viewer, colors)
+    }
+  }
 
   // 重新创建所有开启的特效以应用新主题
   effectItems.forEach(item => {
@@ -650,6 +625,11 @@ const handleFireworkChange = (show: boolean) => {
       }
     }, 2500)
   } else {
+    // 清理烟花定时器
+    if (fireworkInterval) {
+      clearInterval(fireworkInterval)
+      fireworkInterval = null
+    }
     effectsManager.removeEffect('firework')
     ElMessage.success('烟花庆典特效已关闭')
   }
@@ -777,9 +757,13 @@ const effectItems = [
  * 清理
  */
 onUnmounted(() => {
+  // 清理烟花定时器
   if (fireworkInterval) {
     clearInterval(fireworkInterval)
   }
+
+  // 移除主题变更监听器
+  offThemeChange(() => {})
 })
 </script>
 

@@ -128,11 +128,16 @@ export class RadarEffect {
    */
   destroy(): void {
     if (this.entity) {
-      this.viewer.entities.remove(this.entity)
+      try {
+        this.viewer.entities.remove(this.entity)
+      } catch (e) {
+        console.warn('[RadarEffect] Error removing entity:', e)
+      }
       this.entity = null
     }
 
     this.materialProperty = null
+    console.log('[RadarEffect] Radar destroyed')
   }
 
   /**

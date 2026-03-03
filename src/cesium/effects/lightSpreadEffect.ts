@@ -105,9 +105,7 @@ export class LightSpreadEffect {
         coordinates: Cesium.Rectangle.fromDegrees(minLon, minLat, maxLon, maxLat),
         material: this.materialProperty,
         height: height,
-        outline: true,
-        outlineColor: centerColor.withAlpha(0.6),
-        outlineWidth: 2,
+        outline: false,
         stRotation: 0
       }
     })
@@ -122,11 +120,16 @@ export class LightSpreadEffect {
    */
   destroy(): void {
     if (this.entity) {
-      this.viewer.entities.remove(this.entity)
+      try {
+        this.viewer.entities.remove(this.entity)
+      } catch (e) {
+        console.warn('[LightSpreadEffect] Error removing entity:', e)
+      }
       this.entity = null
     }
 
     this.materialProperty = null
+    console.log('[LightSpreadEffect] Light spread destroyed')
   }
 
   /**

@@ -255,7 +255,11 @@ export class WaterSurfaceEffect {
    */
   destroy(): void {
     if (this.primitive) {
-      this.viewer.scene.primitives.remove(this.primitive)
+      try {
+        this.viewer.scene.primitives.remove(this.primitive)
+      } catch (e) {
+        console.warn('[WaterSurfaceEffect] Error removing primitive:', e)
+      }
       this.primitive = null
     }
     this.isActive = false

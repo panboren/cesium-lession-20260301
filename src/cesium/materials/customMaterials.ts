@@ -72,11 +72,60 @@ export const effectThemes = {
 let currentTheme: keyof typeof effectThemes = 'cyan'
 
 /**
+ * 主题监听器回调函数类型
+ */
+type ThemeChangeListener = (themeName: keyof typeof effectThemes, colors: any) => void
+
+/**
+ * 主题变更监听器列表
+ */
+const themeChangeListeners: ThemeChangeListener[] = []
+
+/**
+ * 注册主题变更监听器
+ */
+export function onThemeChange(callback: ThemeChangeListener): void {
+  themeChangeListeners.push(callback)
+}
+
+/**
+ * 移除主题变更监听器
+ */
+export function offThemeChange(callback: ThemeChangeListener): void {
+  const index = themeChangeListeners.indexOf(callback)
+  if (index > -1) {
+    themeChangeListeners.splice(index, 1)
+  }
+}
+
+/**
+ * 触发主题变更事件
+ */
+function notifyThemeChange(themeName: keyof typeof effectThemes, colors: any): void {
+  themeChangeListeners.forEach(callback => {
+    try {
+      callback(themeName, colors)
+    } catch (error) {
+      console.error('[CustomMaterials] Error in theme change listener:', error)
+    }
+  })
+}
+
+/**
  * 设置当前主题
  */
 export function setEffectTheme(themeName: keyof typeof effectThemes) {
+  if (!effectThemes[themeName]) {
+    console.error(`[CustomMaterials] Invalid theme name: ${themeName}`)
+    return
+  }
+
   currentTheme = themeName
+  const colors = effectThemes[themeName]
   console.log('[CustomMaterials] Theme set to:', themeName)
+
+  // 触发主题变更通知
+  notifyThemeChange(themeName, colors)
 }
 
 /**
@@ -84,6 +133,74 @@ export function setEffectTheme(themeName: keyof typeof effectThemes) {
  */
 export function getCurrentThemeColors() {
   return effectThemes[currentTheme]
+}
+
+/**
+ * 更新已存在实体的材质颜色
+ * @param viewer Cesium Viewer 实例
+ * @param colors 新的主题颜色
+ */
+export function updateEntityMaterialColors(viewer: Cesium.Viewer, colors: any): void {
+  const entities = viewer.entities.values
+
+  entities.forEach(entity => {
+    // 更新光墙材质颜色
+    if (entity.wall && (entity.wall.material as any)?.type === 'LightWall') {
+      const material = entity.wall.material as any
+      material.uniforms.color = colors.color
+      material.uniforms.beamColor = colors.beamColor
+    }
+
+    // 更新雷达材质颜色
+    if (entity.ellipse && (entity.ellipse.material as any)?.type === 'Radar') {
+      const material = entity.ellipse.material as any
+      material.uniforms.color = colors.color
+      material.uniforms.scanColor = colors.scanColor
+      material.uniforms.ringColor = colors.ringColor
+    }
+
+    // 更新流光扩散材质颜色
+    if (entity.ellipse && (entity.ellipse.material as any)?.type === 'LightSpread') {
+      const material = entity.ellipse.material as any
+      material.uniforms.color = colors.color
+      material.uniforms.centerColor = colors.centerColor
+      material.uniforms.waveColor = colors.waveColor
+    }
+
+    // 更新飞线材质颜色
+    if (entity.polyline && (entity.polyline.material as any)?.type === 'FlyLine') {
+      const material = entity.polyline.material as any
+      material.uniforms.color = colors.color
+      material.uniforms.headColor = colors.headColor
+    }
+
+    // 更新点、线、面的基础颜色
+    if (entity.point) {
+      const point = entity.point as any
+      if (point.color) {
+        point.color = colors.color.clone()
+      }
+    }
+
+    if (entity.polyline && !(entity.polyline.material as any)?.type) {
+      const polyline = entity.polyline as any
+      if (polyline.material) {
+        polyline.material = colors.color.clone()
+      }
+    }
+
+    if (entity.polygon && !(entity.polygon.material as any)?.type) {
+      const polygon = entity.polygon as any
+      if (polygon.material) {
+        polygon.material = colors.color.clone().withAlpha(0.6)
+      }
+      if (polygon.outlineColor) {
+        polygon.outlineColor = colors.color.clone()
+      }
+    }
+  })
+
+  console.log('[CustomMaterials] Updated entity material colors for', entities.length, 'entities')
 }
 
 /**

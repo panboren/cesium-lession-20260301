@@ -24,7 +24,7 @@ router.afterEach((to) => {
   NProgress.done()
 
   if (to.meta?.title) {
-    document.title = `${to.meta.title} - ${import.meta.env.VITE_APP_TITLE || 'Cesium 3D GIS 平台'}`
+    document.title = `${to.meta.title} - ${import.meta.env.VITE_APP_TITLE || 'ZOOOW Cesium 3D GIS 平台'}`
   }
 
   window.scrollTo(0, 0)

@@ -168,10 +168,16 @@ export class PolylineTrailEffect {
    * 销毁所有飞线
    */
   destroy(): void {
-    this.entities.forEach((entity) => {
-      this.viewer.entities.remove(entity)
+    const count = this.entities.length
+    this.entities.forEach((entity, index) => {
+      try {
+        this.viewer.entities.remove(entity)
+      } catch (e) {
+        console.warn(`[PolylineTrailEffect] Error removing entity ${index}:`, e)
+      }
     })
     this.entities = []
+    console.log(`[PolylineTrailEffect] All flylines destroyed, cleared ${count} entity/entities`)
   }
 
   /**

@@ -6,6 +6,11 @@
 import * as Cesium from 'cesium'
 import type { ViewerOptions } from 'cesium'
 import { registerCustomMaterials } from '../materials/customMaterials'
+import { logger } from '@/utils/logger'
+import {
+  COORDINATES,
+  PERFORMANCE_CONSTANTS
+} from '../constants'
 
 /**
  * Cesium 配置接口
@@ -70,12 +75,12 @@ export interface CesiumConfig {
  */
 export const DEFAULT_CESIUM_CONFIG: CesiumConfig = {
   initialView: {
-    longitude: 116.3912,
-    latitude: 39.9075,
-    height: 10000,
-    heading: 0,
-    pitch: -90,
-    roll: 0
+    longitude: COORDINATES.DEFAULT_INITIAL_VIEW.longitude,
+    latitude: COORDINATES.DEFAULT_INITIAL_VIEW.latitude,
+    height: COORDINATES.DEFAULT_INITIAL_VIEW.height,
+    heading: COORDINATES.DEFAULT_INITIAL_VIEW.heading,
+    pitch: COORDINATES.DEFAULT_INITIAL_VIEW.pitch,
+    roll: COORDINATES.DEFAULT_INITIAL_VIEW.roll
   },
   terrain: {
     enabled: false
@@ -88,9 +93,9 @@ export const DEFAULT_CESIUM_CONFIG: CesiumConfig = {
     }
   ],
   performance: {
-    requestRenderMode: true,
+    requestRenderMode: false,
     maximumRenderTimeChange: Infinity,
-    targetFrameRate: 60
+    targetFrameRate: PERFORMANCE_CONSTANTS.DEFAULT_TARGET_FPS
   },
   ui: {
     showTimeline: false,
@@ -129,15 +134,15 @@ export class CesiumManager {
 
     // 配置 Cesium Ion 访问令牌（可选）
     const token = import.meta.env.VITE_CESIUM_ION_TOKEN
-    console.log('[CesiumManager] Cesium Ion token from env:', token ? `${token.substring(0, 20)}...` : 'undefined')
+    logger.debug('Cesium Ion token from env:', token ? `${token.substring(0, 20)}...` : 'undefined')
     if (token) {
       Cesium.Ion.defaultAccessToken = token
-      console.log('[CesiumManager] Cesium Ion defaultAccessToken set successfully')
+      logger.debug('Cesium Ion defaultAccessToken set successfully')
     }
 
     // 注册自定义材质
     registerCustomMaterials()
-    console.log('[CesiumManager] Custom materials registered')
+    logger.debug('Custom materials registered')
 
     // 创建 Viewer
     this.viewer = new Cesium.Viewer(containerId, {
@@ -172,10 +177,28 @@ export class CesiumManager {
     // 添加底图图层
     this.addImageryLayers(this.config.imageryLayers)
 
-    // 移除默认的 Logo
-    this.viewer._cesiumWidget._creditContainer.style.display = 'none'
+    // 移除默认的 Logo（使用 CSS 方式，避免访问私有属性）
+    this.hideCredits()
 
     return this.viewer
+  }
+
+  /**
+   * 隐藏 Cesium 版权 Logo
+   * 使用 CSS 方式隐藏，避免访问私有属性 _cesiumWidget._creditContainer
+   */
+  private hideCredits(): void {
+    // 方式1: 通过 CSS 类隐藏（推荐）
+    const style = document.createElement('style')
+    style.textContent = `
+      .cesium-viewer-bottom {
+        display: none !important;
+      }
+      .cesium-widget-credits {
+        display: none !important;
+      }
+    `
+    document.head.appendChild(style)
   }
 
   /**
@@ -323,10 +346,23 @@ export class CesiumManager {
 
   /**
    * 渲染场景
+   * 当 requestRenderMode 为 true 时，调用 requestRender() 触发渲染
+   * 否则，场景会自动渲染，无需手动调用
    */
   render(): void {
     if (!this.viewer) return
-    this.viewer.scene.requestRender()
+    if (this.viewer.scene.requestRenderMode) {
+      this.viewer.scene.requestRender()
+    }
+  }
+
+  /**
+   * 检查是否需要手动触发渲染
+   * 在 requestRenderMode 为 true 时返回 true
+   */
+  needsManualRender(): boolean {
+    if (!this.viewer) return false
+    return this.viewer.scene.requestRenderMode
   }
 
   /**
@@ -352,6 +388,43 @@ export class CesiumManager {
    */
   getConfig(): CesiumConfig {
     return this.config
+  }
+
+  /**
+   * 获取场景中的 Primitive 数量
+   */
+  getPrimitiveCount(): number {
+    if (!this.viewer) return 0
+    return this.viewer.scene.primitives.length
+  }
+
+  /**
+   * 获取实体数量
+   */
+  getEntityCount(): number {
+    if (!this.viewer) return 0
+    return this.viewer.entities.values.length
+  }
+
+  /**
+   * 性能优化建议
+   * 当实体数量超过阈值时，建议使用 Primitive 替代 Entity
+   */
+  getPerformanceRecommendation(): { usePrimitive: boolean; reason: string } {
+    const entityCount = this.getEntityCount()
+
+    // 当实体数量超过阈值时，建议使用 Primitive
+    if (entityCount > PERFORMANCE_CONSTANTS.ENTITY_THRESHOLD) {
+      return {
+        usePrimitive: true,
+        reason: `实体数量 (${entityCount}) 超过推荐阈值 (${PERFORMANCE_CONSTANTS.ENTITY_THRESHOLD})，建议使用 PrimitiveManager 替代 Entity API 以提高渲染性能`
+      }
+    }
+
+    return {
+      usePrimitive: false,
+      reason: '当前实体数量在合理范围内'
+    }
   }
 }
 

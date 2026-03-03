@@ -7,6 +7,17 @@ import * as Cesium from 'cesium'
 import { CesiumManager, getCesiumManager, initCesium as initCesiumManager } from '@/cesium/core/cesiumManager'
 import { LayerManager, getLayerManager } from '@/cesium/core/layerManager'
 import { DrawManager, getDrawManager } from '@/cesium/core/drawManager'
+import {
+  PrimitiveManager,
+  initPrimitiveManager,
+  getPrimitiveManager,
+  destroyPrimitiveManager
+} from '@/cesium/core/primitiveManager'
+import type {
+  PointCloudOptions,
+  BillboardBatchOptions,
+  PrimitiveEntity
+} from '@/cesium/core/primitiveManager'
 import { logger } from '@/utils/logger'
 import { handleError } from '@/utils/errorHandler'
 import type { CesiumConfig, DrawConfig, LayerConfig, DrawResult, Coordinate } from '@/types/cesium'
@@ -19,6 +30,8 @@ export class CesiumService {
 
   private constructor() {
     logger.info('CesiumService created')
+    // 自动初始化 Primitive 管理器
+    initPrimitiveManager()
   }
 
   /**
@@ -126,6 +139,148 @@ export class CesiumService {
   }
 
   /**
+   * 高性能批量添加点（使用 Primitive）
+   * 适用于大量点标记（推荐超过 1000 个点时使用）
+   */
+  async addPointsPrimitive(
+    collectionId: string,
+    coordinates: Coordinate[],
+    options: PointCloudOptions = {}
+  ): Promise<Cesium.PointPrimitive[]> {
+    try {
+      const manager = getPrimitiveManager()
+      if (!manager) {
+        throw new Error('Primitive Manager not initialized')
+      }
+
+      const collection = manager.createPointCloudCollection(collectionId, options)
+      const points = manager.addPointsToCollection(
+        collectionId,
+        coordinates.map(coord => ({
+          longitude: coord.longitude,
+          latitude: coord.latitude,
+          height: coord.height
+        })),
+        options
+      )
+
+      logger.info(`Added ${points.length} points using Primitive API`)
+      return points
+    } catch (error) {
+      handleError(error)
+      return []
+    }
+  }
+
+  /**
+   * 高性能批量添加图标（使用 BillboardCollection）
+   */
+  async addBillboardsPrimitive(
+    collectionId: string,
+    items: Array<{
+      longitude: number
+      latitude: number
+      height?: number
+      image?: string
+      scale?: number
+      data?: any
+    }>,
+    options: BillboardBatchOptions = {}
+  ): Promise<Cesium.Billboard[]> {
+    try {
+      const manager = getPrimitiveManager()
+      if (!manager) {
+        throw new Error('Primitive Manager not initialized')
+      }
+
+      manager.createBillboardCollection(collectionId, options)
+      const billboards = manager.addBillboardsToCollection(collectionId, items, options)
+
+      logger.info(`Added ${billboards.length} billboards using Primitive API`)
+      return billboards
+    } catch (error) {
+      handleError(error)
+      return []
+    }
+  }
+
+  /**
+   * 高性能批量创建线段（使用 PolylineGeometry）
+   */
+  async addPolylinesPrimitive(
+    polylines: Array<{
+      id: string
+      positions: Coordinate[]
+      color?: Cesium.Color
+      width?: number
+      data?: any
+    }>
+  ): Promise<void> {
+    try {
+      const manager = getPrimitiveManager()
+      if (!manager) {
+        throw new Error('Primitive Manager not initialized')
+      }
+
+      manager.createPolylinePrimitives(
+        polylines.map(polyline => ({
+          id: polyline.id,
+          positions: polyline.positions.map(pos => ({
+            longitude: pos.longitude,
+            latitude: pos.latitude,
+            height: pos.height
+          })),
+          color: polyline.color,
+          width: polyline.width,
+          data: polyline.data
+        }))
+      )
+
+      logger.info(`Added ${polylines.length} polylines using Primitive API`)
+    } catch (error) {
+      handleError(error)
+    }
+  }
+
+  /**
+   * 高性能批量创建多边形（使用 PolygonGeometry）
+   */
+  async addPolygonsPrimitive(
+    polygons: Array<{
+      id: string
+      positions: Coordinate[]
+      color?: Cesium.Color
+      height?: number
+      data?: any
+    }>
+  ): Promise<void> {
+    try {
+      const manager = getPrimitiveManager()
+      if (!manager) {
+        throw new Error('Primitive Manager not initialized')
+      }
+
+      manager.createPolygonPrimitives(
+        polygons.map(polygon => ({
+          id: polygon.id,
+          positions: polygon.positions.map(pos => ({
+            longitude: pos.longitude,
+            latitude: pos.latitude,
+            height: pos.height
+          })),
+          color: polygon.color,
+          height: polygon.height,
+          data: polygon.data
+        }))
+      )
+
+      logger.info(`Added ${polygons.length} polygons using Primitive API`)
+    } catch (error) {
+      handleError(error)
+    }
+  }
+
+  /**
    * 添加图层
    */
   async addLayer(config: LayerConfig): Promise<Cesium.ImageryLayer | Cesium.DataSource | Cesium.Entity | null> {
@@ -217,6 +372,38 @@ export class CesiumService {
   }
 
   /**
+   * 获取性能统计信息
+   */
+  getPerformanceStats() {
+    try {
+      const manager = getCesiumManager()
+      if (!manager) return null
+
+      const primitiveManager = getPrimitiveManager()
+      return {
+        entities: manager.getEntityCount(),
+        primitives: manager.getPrimitiveCount(),
+        recommendation: manager.getPerformanceRecommendation(),
+        primitiveCollections: primitiveManager ? primitiveManager.getCollectionStats() : null
+      }
+    } catch (error) {
+      handleError(error, { showMessage: false })
+      return null
+    }
+  }
+
+  /**
+   * 手动触发渲染
+   * 当 requestRenderMode 为 true 时，需要手动调用此方法来更新场景
+   */
+  requestRender(): void {
+    const manager = getCesiumManager()
+    if (manager) {
+      manager.render()
+    }
+  }
+
+  /**
    * 清除所有实体
    */
   clearAllEntities(): void {
@@ -226,6 +413,51 @@ export class CesiumService {
 
       manager.clearEntities()
       logger.info('All entities cleared')
+    } catch (error) {
+      handleError(error)
+    }
+  }
+
+  /**
+   * 清除所有 Primitive
+   */
+  clearAllPrimitives(): void {
+    try {
+      const manager = getPrimitiveManager()
+      if (!manager) return
+
+      manager.clearAll()
+      logger.info('All primitives cleared')
+    } catch (error) {
+      handleError(error)
+    }
+  }
+
+  /**
+   * 清除指定点云集合
+   */
+  clearPointCloudCollection(collectionId: string): void {
+    try {
+      const manager = getPrimitiveManager()
+      if (!manager) return
+
+      manager.removePointCloudCollection(collectionId)
+      logger.info(`Point cloud collection cleared: ${collectionId}`)
+    } catch (error) {
+      handleError(error)
+    }
+  }
+
+  /**
+   * 清除指定 Billboard 集合
+   */
+  clearBillboardCollection(collectionId: string): void {
+    try {
+      const manager = getPrimitiveManager()
+      if (!manager) return
+
+      manager.removeBillboardCollection(collectionId)
+      logger.info(`Billboard collection cleared: ${collectionId}`)
     } catch (error) {
       handleError(error)
     }
@@ -302,9 +534,7 @@ export class CesiumService {
       logger.info('Map style applied', options)
 
       // 触发渲染以更新显示
-      if (viewer.scene.requestRenderMode) {
-        viewer.scene.requestRender()
-      }
+      this.requestRender()
     } catch (error) {
       handleError(error)
     }
@@ -328,13 +558,13 @@ export class CesiumService {
         return
       }
 
-      console.log('[CesiumService] Setting imagery provider to:', providerType)
+      logger.debug('Setting imagery provider to:', providerType)
 
       // 移除所有现有的影像图层（除了基础图层）
       const imageryLayers = viewer.imageryLayers
-      console.log('[CesiumService] Before remove, layers count:', imageryLayers.length)
+      logger.debug('Before remove, layers count:', imageryLayers.length)
       imageryLayers.removeAll()
-      console.log('[CesiumService] After remove, layers count:', imageryLayers.length)
+      logger.debug('After remove, layers count:', imageryLayers.length)
 
       let provider: Cesium.ImageryProvider
 
@@ -347,7 +577,7 @@ export class CesiumService {
             credit: '高德矢量地图',
             maximumLevel: 18
           })
-          console.log('[CesiumService] Gaode Vector imagery provider loaded')
+          logger.debug('Gaode Vector imagery provider loaded')
           logger.info('Gaode Vector imagery provider enabled')
           break
 
@@ -360,7 +590,7 @@ export class CesiumService {
             maximumLevel: 18,
             tilingScheme: new Cesium.WebMercatorTilingScheme()
           })
-          console.log('[CesiumService] Gaode Satellite imagery provider loaded')
+          logger.debug('Gaode Satellite imagery provider loaded')
           logger.info('Gaode Satellite imagery provider enabled')
           break
 
@@ -373,7 +603,7 @@ export class CesiumService {
             maximumLevel: 18,
             tilingScheme: new Cesium.WebMercatorTilingScheme()
           })
-          console.log('[CesiumService] Gaode Hybrid satellite layer loaded')
+          logger.debug('Gaode Hybrid satellite layer loaded')
           // 添加卫星底图
           imageryLayers.addImageryProvider(satelliteProvider)
           // 添加注记图层
@@ -384,26 +614,27 @@ export class CesiumService {
             maximumLevel: 18
           })
           imageryLayers.addImageryProvider(labelProvider)
-          console.log('[CesiumService] Gaode Hybrid imagery provider loaded')
+          logger.debug('Gaode Hybrid imagery provider loaded')
           logger.info('Gaode Hybrid imagery provider enabled')
           // 飞向北京
-          viewer.camera.flyTo({
-            destination: Cesium.Cartesian3.fromDegrees(116.3912, 39.9075, 10000),
-            duration: 0.5
-          })
-          viewer.scene.requestRender()
-          return // 已经添加了两个图层，直接返回
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(116.3912, 39.9075, 10000),
+        duration: 0.5
+      })
+
+      this.requestRender()
+      return // 已经添加了两个图层，直接返回
 
         case 'bing':
           // Bing 地图 - 需要配置 Bing Maps Key
           const bingKey = import.meta.env.VITE_BING_MAPS_KEY || ''
           if (!bingKey) {
-            console.warn('[CesiumService] Bing Maps Key not configured, falling back to OSM')
+            logger.warn('Bing Maps Key not configured, falling back to OSM')
             // 如果没有配置 Bing Key，回退到 OSM
             provider = new Cesium.OpenStreetMapImageryProvider({
               url: 'https://tile.openstreetmap.org/'
             })
-            console.log('[CesiumService] OSM imagery provider loaded (fallback from Bing)')
+            logger.debug('OSM imagery provider loaded (fallback from Bing)')
             logger.info('OSM imagery provider enabled (fallback from Bing)')
           } else {
             provider = new Cesium.BingMapsImageryProvider({
@@ -411,7 +642,7 @@ export class CesiumService {
               key: bingKey,
               mapStyle: Cesium.BingMapsStyle.AERIAL_WITH_LABELS
             })
-            console.log('[CesiumService] Bing imagery provider loaded')
+            logger.debug('Bing imagery provider loaded')
             logger.info('Bing imagery provider enabled')
           }
           break
@@ -422,14 +653,14 @@ export class CesiumService {
           provider = new Cesium.OpenStreetMapImageryProvider({
             url: 'https://tile.openstreetmap.org/'
           })
-          console.log('[CesiumService] OSM imagery provider loaded')
+          logger.debug('OSM imagery provider loaded')
           logger.info('OSM imagery provider enabled')
           break
       }
 
       imageryLayers.addImageryProvider(provider)
-      console.log('[CesiumService] Imagery provider set successfully, layers count:', imageryLayers.length)
-      console.log('[CesiumService] First layer ready:', imageryLayers.get(0)?.ready)
+      logger.debug('Imagery provider set successfully, layers count:', imageryLayers.length)
+      logger.debug('First layer ready:', imageryLayers.get(0)?.ready)
 
       // 影像图层切换后飞向北京
       viewer.camera.flyTo({
@@ -437,9 +668,8 @@ export class CesiumService {
         duration: 0.5
       })
 
-      viewer.scene.requestRender()
+      this.requestRender()
     } catch (error) {
-      console.error('[CesiumService] Error setting imagery provider:', error)
       logger.error('Error setting imagery provider:', error)
       handleError(error, {
         showMessage: true,
@@ -488,22 +718,22 @@ export class CesiumService {
         return
       }
 
-      console.log('[CesiumService] Setting terrain provider to:', terrainType)
+      logger.debug('Setting terrain provider to:', terrainType)
 
       switch (terrainType) {
         case CesiumService.TerrainType.SIMPLE:
           // 简单地形 - 使用更轻量的 Cesium Ion 地形
-          console.log('[CesiumService] Loading Simple Terrain...')
+          logger.debug('Loading Simple Terrain...')
           try {
             const terrain = await Cesium.Terrain.fromWorldTerrain()
             await viewer.scene.setTerrain(terrain)
             viewer.scene.globe.enableLighting = true
             // 启用地形深度测试，使地形更明显
             viewer.scene.globe.depthTestAgainstTerrain = true
-            console.log('[CesiumService] Simple Terrain loaded successfully')
+            logger.debug('Simple Terrain loaded successfully')
             logger.info('Simple Terrain enabled')
           } catch (error) {
-            console.error('[CesiumService] Failed to load Simple terrain:', error)
+            logger.error('Failed to load Simple terrain', error)
             logger.warn('Failed to load Simple terrain', error)
             handleError(error, {
               showMessage: true,
@@ -515,7 +745,7 @@ export class CesiumService {
 
         case CesiumService.TerrainType.CUSTOM:
           // 自定义地形 - 使用正弦波模拟地形，增强高度对比
-          console.log('[CesiumService] Loading Custom Terrain...')
+          logger.debug('Loading Custom Terrain...')
           try {
             const width = 64
             const height = 64
@@ -541,10 +771,10 @@ export class CesiumService {
             await viewer.scene.setTerrain(new Cesium.Terrain(provider))
             viewer.scene.globe.enableLighting = true
             viewer.scene.globe.depthTestAgainstTerrain = true
-            console.log('[CesiumService] Custom Terrain loaded successfully')
+            logger.debug('Custom Terrain loaded successfully')
             logger.info('Custom Terrain enabled')
           } catch (error) {
-            console.error('[CesiumService] Failed to load Custom terrain:', error)
+            logger.error('Failed to load Custom terrain', error)
             logger.warn('Failed to load Custom terrain', error)
             handleError(error, {
               showMessage: true,
@@ -556,7 +786,7 @@ export class CesiumService {
 
         case CesiumService.TerrainType.CESIUM_ION:
           // Cesium Ion 高精度地形（带水体和法线）
-          console.log('[CesiumService] Loading Cesium Ion High Precision Terrain...')
+          logger.debug('Loading Cesium Ion High Precision Terrain...')
           try {
             const terrain = await Cesium.Terrain.fromWorldTerrain({
               requestWaterMask: true,
@@ -565,10 +795,10 @@ export class CesiumService {
             await viewer.scene.setTerrain(terrain)
             viewer.scene.globe.enableLighting = true
             viewer.scene.globe.depthTestAgainstTerrain = true
-            console.log('[CesiumService] Cesium Ion High Precision Terrain loaded successfully')
+            logger.debug('Cesium Ion High Precision Terrain loaded successfully')
             logger.info('Cesium Ion High Precision Terrain enabled')
           } catch (error) {
-            console.error('[CesiumService] Failed to load Cesium Ion terrain:', error)
+            logger.error('Failed to load Cesium Ion terrain', error)
             logger.warn('Failed to load Cesium Ion terrain', error)
             handleError(error, {
               showMessage: true,
@@ -580,7 +810,7 @@ export class CesiumService {
 
         case CesiumService.TerrainType.ARCGIS:
           // ArcGIS 地形
-          console.log('[CesiumService] Loading ArcGIS Terrain...')
+          logger.debug('Loading ArcGIS Terrain...')
           try {
             const terrain = new Cesium.Terrain(
               Cesium.ArcGISTiledElevationTerrainProvider.fromUrl(
@@ -590,10 +820,10 @@ export class CesiumService {
             await viewer.scene.setTerrain(terrain)
             viewer.scene.globe.enableLighting = true
             viewer.scene.globe.depthTestAgainstTerrain = true
-            console.log('[CesiumService] ArcGIS Terrain loaded successfully')
+            logger.debug('ArcGIS Terrain loaded successfully')
             logger.info('ArcGIS Terrain enabled')
           } catch (error) {
-            console.error('[CesiumService] Failed to load ArcGIS terrain:', error)
+            logger.error('Failed to load ArcGIS terrain', error)
             logger.warn('Failed to load ArcGIS terrain', error)
             handleError(error, {
               showMessage: true,
@@ -606,12 +836,12 @@ export class CesiumService {
         case CesiumService.TerrainType.NONE:
         default:
           // 无地形（椭球体）
-          console.log('[CesiumService] Removing terrain (using EllipsoidTerrainProvider)')
+          logger.debug('Removing terrain (using EllipsoidTerrainProvider)')
           const ellipsoidProvider = new Cesium.EllipsoidTerrainProvider()
           await viewer.scene.setTerrain(new Cesium.Terrain(ellipsoidProvider))
           viewer.scene.globe.enableLighting = false
           viewer.scene.globe.depthTestAgainstTerrain = false
-          console.log('[CesiumService] Terrain disabled')
+          logger.debug('Terrain disabled')
           logger.info('Terrain disabled')
           break
       }
@@ -622,9 +852,8 @@ export class CesiumService {
         duration: 0.5
       })
 
-      viewer.scene.requestRender()
+      this.requestRender()
     } catch (error) {
-      console.error('[CesiumService] Error setting terrain provider:', error)
       logger.error('Error setting terrain provider:', error)
       throw error
     }
@@ -651,7 +880,7 @@ export class CesiumService {
       viewer.scene.skyBox.show = show
       logger.info('Atmosphere', show ? 'enabled' : 'disabled')
 
-      viewer.scene.requestRender()
+      this.requestRender()
     } catch (error) {
       handleError(error)
     }

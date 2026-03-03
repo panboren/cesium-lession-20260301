@@ -466,17 +466,33 @@ export class WeatherEffect {
    * 销毁天气效果
    */
   destroy(): void {
+    let removedCount = 0
+
     if (this.rainSystem) {
-      this.viewer.scene.primitives.remove(this.rainSystem)
+      try {
+        this.rainSystem.show = false
+        this.rainSystem.lifetime = 0
+        this.viewer.scene.primitives.remove(this.rainSystem)
+        removedCount++
+        console.log('[WeatherEffect] Rain destroyed')
+      } catch (e) {
+        console.warn('[WeatherEffect] Error removing rain system:', e)
+      }
       this.rainSystem = null
-      console.log('[WeatherEffect] Rain destroyed')
     }
     if (this.snowSystem) {
-      this.viewer.scene.primitives.remove(this.snowSystem)
+      try {
+        this.snowSystem.show = false
+        this.snowSystem.lifetime = 0
+        this.viewer.scene.primitives.remove(this.snowSystem)
+        removedCount++
+        console.log('[WeatherEffect] Snow destroyed')
+      } catch (e) {
+        console.warn('[WeatherEffect] Error removing snow system:', e)
+      }
       this.snowSystem = null
-      console.log('[WeatherEffect] Snow destroyed')
     }
-    console.log('[WeatherEffect] Weather destroyed')
+    console.log(`[WeatherEffect] Weather destroyed, removed ${removedCount} system(s)`)
   }
 
   /**

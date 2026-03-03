@@ -527,12 +527,18 @@ export class FountainEffect {
    * 销毁特效
    */
   destroy(): void {
+    const particleCount = this.particles.length
+
     this.stopUpdateLoop()
     this.stopParticleGeneration()
 
     // 移除所有粒子实体
-    this.particles.forEach((p) => {
-      this.viewer.entities.remove(p.entity)
+    this.particles.forEach((p, index) => {
+      try {
+        this.viewer.entities.remove(p.entity)
+      } catch (e) {
+        console.warn(`[FountainEffect] Error removing particle ${index}:`, e)
+      }
     })
     this.particles = []
 
@@ -540,6 +546,6 @@ export class FountainEffect {
     this.time = 0
 
     this.isActive = false
-    console.log('[FountainEffect] Fountain destroyed')
+    console.log(`[FountainEffect] Fountain destroyed, cleared ${particleCount} particle(s)`)
   }
 }

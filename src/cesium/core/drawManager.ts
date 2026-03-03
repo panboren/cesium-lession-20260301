@@ -7,6 +7,43 @@ import * as Cesium from 'cesium'
 import { getCesiumManager } from './cesiumManager'
 import { DrawType } from '@/types/cesium'
 import type { DrawStyle, DrawConfig, DrawEvent } from '@/types/cesium'
+import {
+  DRAWING_CONSTANTS,
+  PRIMITIVE_CONSTANTS
+} from '../constants'
+
+/**
+ * 动态多边形接口
+ * 用于处理 CallbackProperty 更新的多边形
+ */
+interface DynamicPolygon extends Cesium.PolygonGraphics {
+  hierarchy?: Cesium.CallbackProperty
+}
+
+/**
+ * 动态椭圆接口
+ * 用于处理 CallbackProperty 更新的椭圆
+ */
+interface DynamicEllipse extends Cesium.EllipseGraphics {
+  semiMinorAxis?: number
+  semiMajorAxis?: number
+}
+
+/**
+ * 动态线段接口
+ * 用于处理 CallbackProperty 更新的线段
+ */
+interface DynamicPolyline extends Cesium.PolylineGraphics {
+  positions?: Cesium.CallbackProperty
+}
+
+/**
+ * 动态矩形接口
+ * 用于处理 CallbackProperty 更新的矩形
+ */
+interface DynamicRectangle extends Cesium.RectangleGraphics {
+  coordinates?: Cesium.Rectangle
+}
 
 /**
  * 绘制上下文
@@ -51,17 +88,17 @@ abstract class DrawStrategy {
       case DrawType.POINT:
         return {
           point: {
-            pixelSize: 50,
+            pixelSize: DRAWING_CONSTANTS.POINT_PIXEL_SIZE,
             color: Cesium.Color.YELLOW,
             outlineColor: Cesium.Color.RED,
-            outlineWidth: 5,
+            outlineWidth: DRAWING_CONSTANTS.POINT_OUTLINE_WIDTH,
             disableDepthTestDistance: Number.POSITIVE_INFINITY
           }
         }
       case DrawType.POLYLINE:
         return {
           line: {
-            width: 5,
+            width: DRAWING_CONSTANTS.LINE_WIDTH,
             material: Cesium.Color.RED,
             clampToGround: false
           }
@@ -74,13 +111,36 @@ abstract class DrawStrategy {
             material: Cesium.Color.RED.withAlpha(0.6),
             outline: true,
             outlineColor: Cesium.Color.WHITE,
-            outlineWidth: 4,
+            outlineWidth: DRAWING_CONSTANTS.POLYGON_OUTLINE_WIDTH,
             perPositionHeight: false
           }
         }
       default:
         return {}
     }
+  }
+
+  /**
+   * 从屏幕坐标拾取位置（尝试多种拾取方式提高精度）
+   */
+  protected pickPosition(windowPosition: Cesium.Cartesian2): Cesium.Cartesian3 | undefined {
+    const viewer = this.context.viewer
+
+    // 方法1: 使用 scene.pickPosition（优先级最高，适用于 3D 场景）
+    let cartesian = viewer.scene.pickPosition(windowPosition)
+
+    // 方法2: 使用 camera.pickEllipsoid（适用于地球表面）
+    if (!cartesian) {
+      cartesian = viewer.camera.pickEllipsoid(windowPosition, viewer.scene.globe.ellipsoid)
+    }
+
+    // 方法3: 使用 globe.pick（适用于地形）
+    if (!cartesian) {
+      const ray = viewer.camera.getPickRay(windowPosition)
+      cartesian = viewer.scene.globe.pick(ray!, viewer.scene)
+    }
+
+    return cartesian || undefined
   }
 }
 
@@ -111,22 +171,6 @@ class PointDrawStrategy extends DrawStrategy {
       },
       Cesium.ScreenSpaceEventType.LEFT_CLICK
     )
-  }
-
-  private pickPosition(windowPosition: Cesium.Cartesian2): Cesium.Cartesian3 | undefined {
-    const viewer = this.context.viewer
-
-    // 尝试多种拾取方式
-    let cartesian = viewer.scene.pickPosition(windowPosition)
-    if (!cartesian) {
-      cartesian = viewer.camera.pickEllipsoid(windowPosition, viewer.scene.globe.ellipsoid)
-    }
-    if (!cartesian) {
-      const ray = viewer.camera.getPickRay(windowPosition)
-      cartesian = viewer.scene.globe.pick(ray!, viewer.scene)
-    }
-
-    return cartesian || undefined
   }
 }
 
@@ -159,14 +203,7 @@ class PolylineDrawStrategy extends DrawStrategy {
     handler.setInputAction(
       (move: Cesium.ScreenSpaceEventHandler.MotionEvent) => {
         if (this.positions.length > 0) {
-          const cartesian = this.pickPosition(move.endPosition)
-          if (cartesian && this.context.activeEntity) {
-            const previewPositions = [...this.positions, cartesian]
-            ;(this.context.activeEntity.polyline as any).positions = new Cesium.CallbackProperty(
-              () => previewPositions,
-              false
-            )
-          }
+          this.updatePolylinePreview(move.endPosition)
         }
       },
       Cesium.ScreenSpaceEventType.MOUSE_MOVE
@@ -184,7 +221,7 @@ class PolylineDrawStrategy extends DrawStrategy {
     const entity = this.context.viewer.entities.add({
       polyline: {
         positions: new Cesium.CallbackProperty(() => this.positions, false),
-        width: style.line?.width || 3,
+        width: style.line?.width || PRIMITIVE_CONSTANTS.POLYLINE_DEFAULT_WIDTH,
         material: style.line?.material || Cesium.Color.CYAN,
         clampToGround: style.line?.clampToGround ?? true
       }
@@ -194,17 +231,19 @@ class PolylineDrawStrategy extends DrawStrategy {
     this.context.onEntityCreated(entity)
   }
 
-  private pickPosition(windowPosition: Cesium.Cartesian2): Cesium.Cartesian3 | undefined {
-    const viewer = this.context.viewer
-    let cartesian = viewer.scene.pickPosition(windowPosition)
-    if (!cartesian) {
-      cartesian = viewer.camera.pickEllipsoid(windowPosition, viewer.scene.globe.ellipsoid)
-    }
-    if (!cartesian) {
-      const ray = viewer.camera.getPickRay(windowPosition)
-      cartesian = viewer.scene.globe.pick(ray!, viewer.scene)
-    }
-    return cartesian || undefined
+  /**
+   * 更新线段预览
+   */
+  private updatePolylinePreview(endPosition: Cesium.Cartesian2): void {
+    const cartesian = this.pickPosition(endPosition)
+    if (!cartesian || !this.context.activeEntity) return
+
+    const previewPositions = [...this.positions, cartesian]
+    const dynamicPolyline = this.context.activeEntity.polyline as DynamicPolyline
+    dynamicPolyline.positions = new Cesium.CallbackProperty(
+      () => previewPositions,
+      false
+    )
   }
 }
 
@@ -237,18 +276,7 @@ class PolygonDrawStrategy extends DrawStrategy {
     handler.setInputAction(
       (move: Cesium.ScreenSpaceEventHandler.MotionEvent) => {
         if (this.positions.length > 0) {
-          const cartesian = this.pickPosition(move.endPosition)
-          if (cartesian && this.context.activeEntity) {
-            const previewPositions = [...this.positions, cartesian]
-            ;(this.context.activeEntity.polygon as any).hierarchy = new Cesium.CallbackProperty(
-              () => {
-                return previewPositions.length >= 3
-                  ? new Cesium.PolygonHierarchy(previewPositions)
-                  : null
-              },
-              false
-            )
-          }
+          this.updatePolygonPreview(move.endPosition)
         }
       },
       Cesium.ScreenSpaceEventType.MOUSE_MOVE
@@ -282,17 +310,23 @@ class PolygonDrawStrategy extends DrawStrategy {
     this.context.onEntityCreated(entity)
   }
 
-  private pickPosition(windowPosition: Cesium.Cartesian2): Cesium.Cartesian3 | undefined {
-    const viewer = this.context.viewer
-    let cartesian = viewer.scene.pickPosition(windowPosition)
-    if (!cartesian) {
-      cartesian = viewer.camera.pickEllipsoid(windowPosition, viewer.scene.globe.ellipsoid)
-    }
-    if (!cartesian) {
-      const ray = viewer.camera.getPickRay(windowPosition)
-      cartesian = viewer.scene.globe.pick(ray!, viewer.scene)
-    }
-    return cartesian || undefined
+  /**
+   * 更新多边形预览
+   */
+  private updatePolygonPreview(endPosition: Cesium.Cartesian2): void {
+    const cartesian = this.pickPosition(endPosition)
+    if (!cartesian || !this.context.activeEntity) return
+
+    const previewPositions = [...this.positions, cartesian]
+    const dynamicPolygon = this.context.activeEntity.polygon as DynamicPolygon
+    dynamicPolygon.hierarchy = new Cesium.CallbackProperty(
+      () => {
+        return previewPositions.length >= 3
+          ? new Cesium.PolygonHierarchy(previewPositions)
+          : null
+      },
+      false
+    )
   }
 }
 
@@ -369,48 +403,47 @@ class CircleDrawStrategy extends DrawStrategy {
   }
 
   private updateCircleRadius(): void {
-    if (this.context.activeEntity) {
-      ;(this.context.activeEntity.ellipse as any).semiMinorAxis = this.currentRadius
-      ;(this.context.activeEntity.ellipse as any).semiMajorAxis = this.currentRadius
-    }
+    if (!this.context.activeEntity) return
+
+    const dynamicEllipse = this.context.activeEntity.ellipse as DynamicEllipse
+    dynamicEllipse.semiMinorAxis = this.currentRadius
+    dynamicEllipse.semiMajorAxis = this.currentRadius
   }
 
   private finishCircle(): void {
     if (this.context.activeEntity && this.centerPosition) {
       // 固定半径值
-      ;(this.context.activeEntity.ellipse as any).semiMinorAxis = this.currentRadius
-      ;(this.context.activeEntity.ellipse as any).semiMajorAxis = this.currentRadius
+      const dynamicEllipse = this.context.activeEntity.ellipse as DynamicEllipse
+      dynamicEllipse.semiMinorAxis = this.currentRadius
+      dynamicEllipse.semiMajorAxis = this.currentRadius
 
       // 添加圆的边界点到 positions 用于计算包围盒
-      const numPoints = 8
-      const radius = this.currentRadius
-      for (let i = 0; i < numPoints; i++) {
-        const angle = (i / numPoints) * 2 * Math.PI
-        const cartographic = Cesium.Cartographic.fromCartesian(this.centerPosition)
-        const point = Cesium.Cartesian3.fromRadians(
-          cartographic.longitude + (radius / 6378137) * Math.cos(angle),
-          cartographic.latitude + (radius / 6378137) * Math.sin(angle),
-          cartographic.height
-        )
-        this.context.tempPositions.push(point)
-      }
+      this.addCircleBoundingPoints()
     }
 
     this.isDrawing = false
     this.context.onFinish()
   }
 
-  private pickPosition(windowPosition: Cesium.Cartesian2): Cesium.Cartesian3 | undefined {
-    const viewer = this.context.viewer
-    let cartesian = viewer.scene.pickPosition(windowPosition)
-    if (!cartesian) {
-      cartesian = viewer.camera.pickEllipsoid(windowPosition, viewer.scene.globe.ellipsoid)
+  /**
+   * 添加圆的边界点用于计算包围盒
+   */
+  private addCircleBoundingPoints(): void {
+    if (!this.centerPosition) return
+
+    const numPoints = 8
+    const radius = this.currentRadius
+    const cartographic = Cesium.Cartographic.fromCartesian(this.centerPosition)
+
+    for (let i = 0; i < numPoints; i++) {
+      const angle = (i / numPoints) * 2 * Math.PI
+      const point = Cesium.Cartesian3.fromRadians(
+        cartographic.longitude + (radius / 6378137) * Math.cos(angle),
+        cartographic.latitude + (radius / 6378137) * Math.sin(angle),
+        cartographic.height
+      )
+      this.context.tempPositions.push(point)
     }
-    if (!cartesian) {
-      const ray = viewer.camera.getPickRay(windowPosition)
-      cartesian = viewer.scene.globe.pick(ray!, viewer.scene)
-    }
-    return cartesian || undefined
   }
 }
 
@@ -471,73 +504,90 @@ class RectangleDrawStrategy extends DrawStrategy {
     ])
 
     if (!this.context.activeEntity && this.currentRectangle) {
-      const style = this.context.config.style || this.getDefaultStyle(DrawType.RECTANGLE)
-
-      const entity = this.context.viewer.entities.add({
-        rectangle: {
-          coordinates: this.currentRectangle,
-          material: style.polygon?.material || Cesium.Color.RED.withAlpha(0.6),
-          outline: style.polygon?.outline ?? true,
-          outlineColor: style.polygon?.outlineColor || Cesium.Color.WHITE,
-          outlineWidth: 4,
-          height: 0,
-          classificationType: Cesium.ClassificationType.TERRAIN
-        }
-      })
-
-      this.context.activeEntity = entity
-      this.context.onEntityCreated(entity)
+      this.createRectangleEntity()
     } else if (this.context.activeEntity && this.currentRectangle) {
-      ;(this.context.activeEntity.rectangle as any).coordinates = this.currentRectangle
+      this.updateRectangleEntity()
     }
+  }
+
+  /**
+   * 创建矩形实体
+   */
+  private createRectangleEntity(): void {
+    const style = this.context.config.style || this.getDefaultStyle(DrawType.RECTANGLE)
+
+    const entity = this.context.viewer.entities.add({
+      rectangle: {
+        coordinates: this.currentRectangle!,
+        material: style.polygon?.material || Cesium.Color.RED.withAlpha(0.6),
+        outline: style.polygon?.outline ?? true,
+        outlineColor: style.polygon?.outlineColor || Cesium.Color.WHITE,
+        outlineWidth: DRAWING_CONSTANTS.RECTANGLE_OUTLINE_WIDTH,
+        height: 0,
+        classificationType: Cesium.ClassificationType.TERRAIN
+      }
+    })
+
+    this.context.activeEntity = entity
+    this.context.onEntityCreated(entity)
+  }
+
+  /**
+   * 更新矩形实体坐标
+   */
+  private updateRectangleEntity(): void {
+    const dynamicRectangle = this.context.activeEntity!.rectangle as DynamicRectangle
+    dynamicRectangle.coordinates = this.currentRectangle!
   }
 
   private finishRectangle(): void {
     // 如果没有移动鼠标，创建一个默认大小的矩形
     if (this.startPosition && !this.currentRectangle) {
-      const startCartographic = Cesium.Cartographic.fromCartesian(this.startPosition)
-      const smallOffset = 0.001
-      this.currentRectangle = Cesium.Rectangle.fromCartographicArray([
-        startCartographic,
-        new Cesium.Cartographic(
-          startCartographic.longitude + smallOffset,
-          startCartographic.latitude + smallOffset
-        )
-      ])
+      this.createDefaultRectangle()
     }
 
     if (this.currentRectangle && this.context.activeEntity) {
-      ;(this.context.activeEntity.rectangle as any).coordinates = this.currentRectangle
-
-      // 添加矩形的四个角点到 tempPositions 用于计算包围盒
-      const west = Cesium.Math.toDegrees(this.currentRectangle.west)
-      const south = Cesium.Math.toDegrees(this.currentRectangle.south)
-      const east = Cesium.Math.toDegrees(this.currentRectangle.east)
-      const north = Cesium.Math.toDegrees(this.currentRectangle.north)
-
-      this.context.tempPositions = [
-        Cesium.Cartesian3.fromDegrees(west, south),
-        Cesium.Cartesian3.fromDegrees(east, south),
-        Cesium.Cartesian3.fromDegrees(east, north),
-        Cesium.Cartesian3.fromDegrees(west, north)
-      ]
+      this.finalizeRectangle()
     }
 
     this.isDrawing = false
     this.context.onFinish()
   }
 
-  private pickPosition(windowPosition: Cesium.Cartesian2): Cesium.Cartesian3 | undefined {
-    const viewer = this.context.viewer
-    let cartesian = viewer.scene.pickPosition(windowPosition)
-    if (!cartesian) {
-      cartesian = viewer.camera.pickEllipsoid(windowPosition, viewer.scene.globe.ellipsoid)
-    }
-    if (!cartesian) {
-      const ray = viewer.camera.getPickRay(windowPosition)
-      cartesian = viewer.scene.globe.pick(ray!, viewer.scene)
-    }
-    return cartesian || undefined
+  /**
+   * 创建默认大小的矩形
+   */
+  private createDefaultRectangle(): void {
+    const startCartographic = Cesium.Cartographic.fromCartesian(this.startPosition!)
+    const smallOffset = 0.001
+    this.currentRectangle = Cesium.Rectangle.fromCartographicArray([
+      startCartographic,
+      new Cesium.Cartographic(
+        startCartographic.longitude + smallOffset,
+        startCartographic.latitude + smallOffset
+      )
+    ])
+  }
+
+  /**
+   * 完成矩形绘制，更新坐标和包围盒
+   */
+  private finalizeRectangle(): void {
+    const dynamicRectangle = this.context.activeEntity!.rectangle as DynamicRectangle
+    dynamicRectangle.coordinates = this.currentRectangle!
+
+    // 添加矩形的四个角点到 tempPositions 用于计算包围盒
+    const west = Cesium.Math.toDegrees(this.currentRectangle.west)
+    const south = Cesium.Math.toDegrees(this.currentRectangle.south)
+    const east = Cesium.Math.toDegrees(this.currentRectangle.east)
+    const north = Cesium.Math.toDegrees(this.currentRectangle.north)
+
+    this.context.tempPositions = [
+      Cesium.Cartesian3.fromDegrees(west, south),
+      Cesium.Cartesian3.fromDegrees(east, south),
+      Cesium.Cartesian3.fromDegrees(east, north),
+      Cesium.Cartesian3.fromDegrees(west, north)
+    ]
   }
 }
 
@@ -681,11 +731,11 @@ export class DrawManager {
       boundingSphere = Cesium.BoundingSphere.fromPoints(this.tempPositions)
     }
 
-    const distance = boundingSphere.radius * 3
+    const distance = boundingSphere.radius * DRAWING_CONSTANTS.FLY_DISTANCE_MULTIPLIER
 
     this.viewer!.camera.flyToBoundingSphere(boundingSphere, {
       offset: new Cesium.HeadingPitchRange(0, -Cesium.Math.PI_OVER_FOUR, distance),
-      duration: 1.5
+      duration: DRAWING_CONSTANTS.FLY_DURATION
     })
   }
 

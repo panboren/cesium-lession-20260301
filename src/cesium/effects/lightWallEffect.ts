@@ -119,11 +119,16 @@ export class LightWallEffect {
    */
   destroy(): void {
     if (this.entity) {
-      this.viewer.entities.remove(this.entity)
+      try {
+        this.viewer.entities.remove(this.entity)
+      } catch (e) {
+        console.warn('[LightWallEffect] Error removing entity:', e)
+      }
       this.entity = null
     }
 
     this.materialProperty = null
+    console.log('[LightWallEffect] Light wall destroyed')
   }
 
   /**

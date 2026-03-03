@@ -30,6 +30,7 @@ export interface FireworkOptions {
 export class FireworkEffect {
   private viewer: Cesium.Viewer
   private particleSystems: Cesium.ParticleSystem[] = []
+  private timeouts: number[] = [] // 跟踪所有 setTimeout ID
 
   // 默认配置（性能优化版）
   private defaultOptions = {
@@ -207,9 +208,13 @@ export class FireworkEffect {
    */
   createMultiple(positions: Array<{ longitude: number; latitude: number; height: number }>, delay: number = 0.5): void {
     positions.forEach((pos, index) => {
-      setTimeout(() => {
-        this.create({ position: pos })
+      const timeoutId = window.setTimeout(() => {
+        // 检查是否已被销毁
+        if (this.timeouts.includes(timeoutId)) {
+          this.create({ position: pos })
+        }
       }, index * delay * 1000)
+      this.timeouts.push(timeoutId)
     })
   }
 
@@ -241,23 +246,43 @@ export class FireworkEffect {
    * 销毁特效
    */
   destroy(): void {
+    const psCount = this.particleSystems.length
+    const timeoutCount = this.timeouts.length
+
+    // 清除所有待执行的 setTimeout
+    this.timeouts.forEach((timeoutId, index) => {
+      try {
+        clearTimeout(timeoutId)
+      } catch (e) {
+        console.warn(`[FireworkEffect] Error clearing timeout ${index}:`, e)
+      }
+    })
+    this.timeouts = []
+
+    if (psCount === 0 && timeoutCount === 0) {
+      console.log('[FireworkEffect] Nothing to destroy')
+      return
+    }
+
     // 移除并销毁所有粒子系统
-    this.particleSystems.forEach((ps) => {
+    this.particleSystems.forEach((ps, index) => {
       try {
         // 立即隐藏
         ps.show = false
         // 设置生命周期为0，立即停止发射新粒子
         ps.lifetime = 0
+        // 清除所有爆发，防止后续发射
+        ps.bursts = []
         // 从场景中移除
         this.viewer.scene.primitives.remove(ps)
       } catch (e) {
-        // 忽略已销毁的错误
+        console.warn(`[FireworkEffect] Error removing particle system ${index + 1}:`, e)
       }
     })
 
     // 清空数组
     this.particleSystems = []
 
-    console.log('[FireworkEffect] Firework destroyed, cleared', this.particleSystems.length, 'systems')
+    console.log(`[FireworkEffect] Destroy complete, cleared ${psCount} particle system(s) and ${timeoutCount} timeout(s)`)
   }
 }
